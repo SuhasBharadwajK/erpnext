@@ -110,8 +110,8 @@ calendars = ["Task", "Work Order", "Sales Order", "Holiday List", "ToDo"]
 website_generators = ["BOM", "Sales Partner"]
 
 website_context = {
-	"favicon": "/assets/erpnext/images/erpnext-favicon.svg",
-	"splash_image": "/assets/erpnext/images/erpnext-logo.svg",
+	"favicon": "/assets/erpnext/images/spl/spl-favicon.png",
+	"splash_image": "/assets/erpnext/images/spl/spl-logo.png",
 }
 
 # nosemgrep
