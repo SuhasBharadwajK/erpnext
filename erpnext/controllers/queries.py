@@ -394,7 +394,7 @@ def get_batch_no(doctype, txt, searchfield, start, page_len, filters):
 	doctype = "Batch"
 	meta = frappe.get_meta(doctype, cached=True)
 	searchfields = meta.get_search_fields()
-	page_len = 30
+	page_len = 300
 
 	batches = get_batches_from_stock_ledger_entries(searchfields, txt, filters, start, page_len)
 	batches.extend(get_batches_from_serial_and_batch_bundle(searchfields, txt, filters, start, page_len))

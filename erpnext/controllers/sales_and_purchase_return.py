@@ -680,6 +680,14 @@ def get_rate_for_return(
 				raise_error_if_no_rate=False,
 			)
 
+	if not rate and voucher_type in ["Sales Invoice", "Delivery Note"]:
+		details = frappe.db.get_value(
+			voucher_type + " Item", voucher_detail_no, ["rate", "allow_zero_valuation_rate"], as_dict=1
+		)
+
+		if details and not details.allow_zero_valuation_rate:
+			rate = flt(details.rate)
+
 	return rate
 
 

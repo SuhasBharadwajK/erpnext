@@ -57,7 +57,6 @@ setup_wizard_complete = "erpnext.setup.setup_wizard.setup_wizard.setup_demo"
 setup_wizard_test = "erpnext.setup.setup_wizard.test_setup_wizard.run_setup_wizard_test"
 
 before_install = [
-	"erpnext.setup.install.check_setup_wizard_not_completed",
 	"erpnext.setup.install.check_frappe_version",
 ]
 after_install = "erpnext.setup.install.after_install"
@@ -110,8 +109,8 @@ calendars = ["Task", "Work Order", "Sales Order", "Holiday List", "ToDo"]
 website_generators = ["BOM", "Sales Partner"]
 
 website_context = {
-	"favicon": "/assets/erpnext/images/spl/spl-favicon.png",
-	"splash_image": "/assets/erpnext/images/spl/spl-logo.png",
+	"favicon": "/assets/erpnext/images/erpnext-favicon.svg",
+	"splash_image": "/assets/erpnext/images/erpnext-logo.svg",
 }
 
 # nosemgrep

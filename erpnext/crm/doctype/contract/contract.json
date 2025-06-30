@@ -2,6 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
+ "autoname": "CON-.YYYY.-.#####",
  "creation": "2018-04-12 06:32:04.582486",
  "doctype": "DocType",
  "editable_grid": 1,
@@ -256,10 +257,11 @@
  "grid_page_length": 50,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-05-23 13:54:03.346537",
+ "modified": "2025-06-19 17:48:45.049007",
  "modified_by": "Administrator",
  "module": "CRM",
  "name": "Contract",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
@@ -324,9 +326,12 @@
   }
  ],
  "row_format": "Dynamic",
+ "search_fields": "party_type, party_name, contract_template",
  "show_name_in_global_search": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
+ "title_field": "party_name",
  "track_changes": 1,
  "track_seen": 1
 }

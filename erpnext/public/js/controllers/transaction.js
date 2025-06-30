@@ -914,7 +914,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		}
 
 		var get_party_currency = function() {
-			if (me.is_a_mapped_document()) {
+			if (me.is_a_mapped_document() || me.frm.doc.__onload?.load_after_mapping) {
 				return;
 			}
 
@@ -987,7 +987,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 				}
 
 				var party = me.frm.doc[frappe.model.scrub(party_type)];
-				if(party && me.frm.doc.company) {
+				if(party && me.frm.doc.company && (!me.frm.doc.__onload?.load_after_mapping || !me.frm.doc.get(party_account_field))) {
 					return frappe.call({
 						method: "erpnext.accounts.party.get_party_account",
 						args: {

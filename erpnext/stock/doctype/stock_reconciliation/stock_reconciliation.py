@@ -478,6 +478,8 @@ class StockReconciliation(StockController):
 			frappe.db.set_value("Serial and Batch Entry", batch.name, update_values)
 
 	def remove_items_with_no_change(self):
+		from erpnext.stock.stock_ledger import get_stock_value_difference
+
 		"""Remove items if qty or rate is not changed"""
 		self.difference_amount = 0.0
 
@@ -512,6 +514,14 @@ class StockReconciliation(StockController):
 				row=item,
 				company=self.company,
 			)
+
+			if not item_dict.get("qty") and not item.qty and not item.valuation_rate and not item.current_qty:
+				difference_amount = get_stock_value_difference(
+					item.item_code, item.warehouse, self.posting_date, self.posting_time, self.name
+				)
+
+				if abs(difference_amount) > 0:
+					return True
 
 			if (
 				(item.qty is None or item.qty == item_dict.get("qty"))
@@ -1105,6 +1115,7 @@ class StockReconciliation(StockController):
 		new_sle.actual_qty = row.current_qty * -1
 		new_sle.valuation_rate = row.current_valuation_rate
 		new_sle.serial_and_batch_bundle = row.current_serial_and_batch_bundle
+		new_sle.flags.ignore_permissions = 1
 		new_sle.submit()
 
 		creation = add_to_date(sle_creation, seconds=-1)
