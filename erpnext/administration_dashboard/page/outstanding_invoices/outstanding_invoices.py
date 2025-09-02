@@ -2,7 +2,7 @@ import frappe
 
 
 @frappe.whitelist()
-def get_invoices():
+def get_invoices(filter_param: str):
     try:
         # Use frappe.get_list to query the Purchase Invoice DocType
         invoices = frappe.get_list(
