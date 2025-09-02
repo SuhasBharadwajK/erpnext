@@ -1,0 +1,20 @@
+{
+ "content": null,
+ "creation": "2025-09-01 22:09:15.444301",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2025-09-01 22:13:54.326597",
+ "modified_by": "Administrator",
+ "module": "Buying",
+ "name": "purchase-items",
+ "owner": "Administrator",
+ "page_name": "purchase-items",
+ "roles": [],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 1,
+ "title": "item",
+ "has_controller": 1
+}
