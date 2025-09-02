@@ -2,11 +2,20 @@ let datatable;
 
 const table_columns = [
 	{ name: "Invoice No.", id: "name", editable: false, resizable: false },
-	{ name: "Date", id: "bill_date", editable: false, resizable: false },
+	{ name: "Date", id: "posting_date", editable: false, resizable: false },
 	{ name: "Party", id: "supplier_name", editable: false, resizable: false },
-	{ name: "Net Payable", id: "net_total", editable: false, resizable: false },
-	{ name: "GST", id: "gst", editable: false, resizable: false },
-	{ name: "TDS", id: "apply_tds", editable: false, resizable: false },
+	{
+        name: "Net Payable",
+        id: "net_total",
+        editable: false,
+        resizable: false,
+        format: (value) => {
+            return frappe.format(value, { fieldtype: 'Currency', currency: 'INR' });
+        },
+    },
+	// { name: "Net Payable", id: "net_total", editable: false, resizable: false },
+	{ name: "GST", id: "base_taxes_and_charges_added", editable: false, resizable: false },
+	{ name: "TDS", id: "base_taxes_and_charges_deducted", editable: false, resizable: false },
 	{ name: "Due Date", id: "due_date", editable: false, resizable: false },
 ];
 
@@ -93,16 +102,20 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 	// }
 };
 
+const refresh_data = () => {
+    frappe.call({
+        method: "erpnext.administration_dashboard.page.outstanding_invoices.outstanding_invoices.get_invoices",
+        callback: function (r) {
+            if (r.message) {
+                console.log("Server returned message:", r.message);
+                datatable.refresh(r.message); 
+            } else {
+                frappe.msgprint("Error: Could not get a response from the server.");
+            }
+        },
+    });
+};
+
 const filter_invoices = () => {
-	frappe.call({
-		method: "erpnext.administration_dashboard.page.outstanding_invoices.outstanding_invoices.get_invoices",
-		callback: function (r) {
-			if (r.message) {
-				console.log("Server returned message:", r.message);
-				datatable.refresh(r.message, table_columns);
-			} else {
-				frappe.msgprint("Error: Could not get a response from the server.");
-			}
-		},
-	});
+	refresh_data();
 };
