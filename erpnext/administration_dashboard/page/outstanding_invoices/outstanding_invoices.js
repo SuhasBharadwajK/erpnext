@@ -18,11 +18,11 @@ const table_columns = [
 		format: (value) => `<a href="/app/purchase-invoice/${value}" target="_blank">${value}</a>`,
 	},
 	{
-		name: __("Due Date"),
+		name: __("Invoice Date"),
 		id: "posting_date",
 		editable: false,
 		resizable: false,
-		format: (value, _, __, doc) => frappe.format(value, { fieldtype: 'Date' }, null, doc),
+		format: (value) => frappe.format(value, { fieldtype: 'Date' }),
 	},
 	{
 		name: __("Party"),
@@ -64,7 +64,7 @@ const table_columns = [
 		id: "due_date",
 		editable: false,
 		resizable: false,
-		format: (value, _, __, doc) => frappe.format(value, { fieldtype: 'Date' }, null, doc),
+		format: (value) => frappe.format(value, { fieldtype: 'Date' }),
 	},
 ];
 
@@ -199,17 +199,18 @@ const get_invoices = (filter_param, page) => {
 		method: "erpnext.administration_dashboard.page.outstanding_invoices.outstanding_invoices.get_invoices",
 		args: {
 			filter_param,
+			start: 1,
+			limit: 100,
 		},
 		freeze: true,
 		freeze_message: __('Getting the requested outstanding invoices...'),
 		callback: function (r) {
-			if (r.message) {
+			is_fetching = false;
+			if (r && r.message && r.message.length) {
 				datatable.refresh(r.message, table_columns);
 			} else {
-				frappe.msgprint("Error: Could not get a response from the server.");
+				frappe.throw(r.message.error ?? "Error: Could not get a response from the server.");
 			}
-
-			is_fetching = false;
 		},
 	});
 };
