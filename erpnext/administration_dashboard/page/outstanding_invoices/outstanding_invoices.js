@@ -3,6 +3,8 @@ let current_filter_param = "";
 let is_fetching = false;
 
 const all_invoices_filter = "all";
+const week_invoices_filter = "week";
+const undue_invoices_filter = "undue";
 const one_month_filter = "30";
 const two_months_filter = "60";
 const three_months_filter = "90";
@@ -75,6 +77,16 @@ const invoice_filters = [
 		filterparam: all_invoices_filter,
 	},
 	{
+		label: "Not due yet",
+		fieldname: "undue-invoices",
+		filterparam: undue_invoices_filter,
+	},
+	{
+		label: "This week",
+		fieldname: "week-invoices",
+		filterparam: week_invoices_filter,
+	},
+	{
 		label: "0 - 30 days",
 		fieldname: "one-month-old",
 		filterparam: one_month_filter,
@@ -140,6 +152,7 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 		cellHeight: 35,
 		columns: table_columns,
 		serialNoColumn: false,
+		noDataMessage: "No data found",
 		layout: "ratio",
 	});
 
@@ -206,7 +219,7 @@ const get_invoices = (filter_param, page) => {
 		freeze_message: __('Getting the requested outstanding invoices...'),
 		callback: function (r) {
 			is_fetching = false;
-			if (r && r.message && r.message.length) {
+			if (r && r.message && r.message.length !== undefined) {
 				datatable.refresh(r.message, table_columns);
 			} else {
 				frappe.throw(r.message.error ?? "Error: Could not get a response from the server.");

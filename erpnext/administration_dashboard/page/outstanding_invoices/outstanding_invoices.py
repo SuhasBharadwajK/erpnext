@@ -1,53 +1,61 @@
-import frappe
 from datetime import datetime, timedelta, timezone
+import frappe
 
 FILTERS_KEY = "filters"
 START_OFFSET_KEY = "start_offset"
 END_OFFSET_KEY = "end_offset"
 
+utc_now = datetime.now(timezone.utc)
+
 invoice_filters = {
     "all": {
-        START_OFFSET_KEY: -1,
-        END_OFFSET_KEY: -1
+        START_OFFSET_KEY: None,
+        END_OFFSET_KEY: None,
+    },
+    "undue": {
+        START_OFFSET_KEY: None,
+        END_OFFSET_KEY: 1,
+    },
+    "week": {
+        START_OFFSET_KEY: ((utc_now + timedelta(days = 6 - utc_now.weekday())) - utc_now).days,
+        END_OFFSET_KEY: ((utc_now + timedelta(days = -utc_now.weekday())) - utc_now).days,
     },
     "30": {
         START_OFFSET_KEY: 0,
-        END_OFFSET_KEY: 30,
+        END_OFFSET_KEY: -30,
     },
     "60": {
-        START_OFFSET_KEY: 31,
-        END_OFFSET_KEY: 60,
+        START_OFFSET_KEY: -31,
+        END_OFFSET_KEY: -60,
     },
     "90": {
-        START_OFFSET_KEY: 61,
-        END_OFFSET_KEY: 90,
+        START_OFFSET_KEY: -61,
+        END_OFFSET_KEY: -90,
     },
     "120": {
-        START_OFFSET_KEY: 90,
-        END_OFFSET_KEY: 120,
+        START_OFFSET_KEY: -91,
+        END_OFFSET_KEY: -120,
     },
     "oldest": {
-        START_OFFSET_KEY: 121,
-        END_OFFSET_KEY: -1,
+        START_OFFSET_KEY: -121,
+        END_OFFSET_KEY: None,
     },
 }
 
-utc_now = datetime.now(timezone.utc)
 
-
-def get_date_from_today(offset: int):
+def get_today_as_string(offset: int):
   return (utc_now + timedelta(days=offset)).strftime("%Y-%m-%d")
 
 
-def get_filter_condition(offset: int, operator1: str, operator2: str):
+def get_filter_condition(offset: int, operator: str):
   condition = ["due_date"]
 
-  if offset == -1:
-    condition.append(operator1)
-  else:
-    condition.append(operator2)
+  if offset is None:
+    return None
 
-  date = get_date_from_today(offset)
+  condition.append(operator)
+
+  date = get_today_as_string(offset)
   condition.append(date)
 
   return condition
@@ -59,14 +67,11 @@ def construct_filter(filter_param: str):
 
   filter_conditions = [
       [
-          "is_paid",
-          "=",
-          "0",
+          "status",
+          "!=",
+          "Paid",
       ]
   ]
-
-  if start_offset == -1 and end_offset == -1:
-    return filter_conditions
 
   gte_operator = ">="
   lte_operator = "<="
@@ -74,18 +79,18 @@ def construct_filter(filter_param: str):
   start_conditions = get_filter_condition(
       start_offset,
       lte_operator,
-      gte_operator
   )
 
-  filter_conditions.append(start_conditions)
+  if start_conditions is not None:
+    filter_conditions.append(start_conditions)
 
   end_conditions = get_filter_condition(
       end_offset,
       gte_operator,
-      lte_operator
   )
 
-  filter_conditions.append(end_conditions)
+  if end_conditions is not None:
+    filter_conditions.append(end_conditions)
 
   return filter_conditions
 
@@ -97,14 +102,14 @@ def get_invoices(filter_param: str, start: int, limit: int):
     invoices = frappe.get_list(
         "Purchase Invoice",
         fields=["*"],
-        limit=10,
+        limit=100,
         order_by="due_date asc",
         filters=construct_filter(filter_param)  # invoice_filters[filter_param]
     )
 
     return invoices
 
-  except KeyError as e:
+  except KeyError:
     errmsg = "The given filter is not valid"
     frappe.errprint(errmsg)
     return {"error": errmsg}
