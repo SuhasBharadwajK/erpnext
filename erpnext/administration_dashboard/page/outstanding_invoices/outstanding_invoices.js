@@ -82,27 +82,27 @@ const invoice_filters = [
 		filterparam: undue_invoices_filter,
 	},
 	{
-		label: "This week",
+		label: "Due this week",
 		fieldname: "week-invoices",
 		filterparam: week_invoices_filter,
 	},
 	{
-		label: "0 - 30 days",
+		label: "0 - 30 days old",
 		fieldname: "one-month-old",
 		filterparam: one_month_filter,
 	},
 	{
-		label: "31 - 60 days",
+		label: "31 - 60 days old",
 		fieldname: "two-months-old",
 		filterparam: two_months_filter,
 	},
 	{
-		label: "61 - 90 days",
+		label: "61 - 90 days old",
 		fieldname: "three-months-old",
 		filterparam: three_months_filter,
 	},
 	{
-		label: "91 - 120 days",
+		label: "91 - 120 days old",
 		fieldname: "four-months-old",
 		filterparam: four_months_filter,
 	},
@@ -112,6 +112,8 @@ const invoice_filters = [
 		filterparam: oldest_filter,
 	},
 ];
+
+let table_data = [];
 
 frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 	var page = frappe.ui.make_app_page({
@@ -136,14 +138,15 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 			fieldname: filter.fieldname,
 		});
 
+		$(button.wrapper).addClass('filter-button-container');
+		$(button.wrapper).find('button').addClass('filter-button');
+
 		button.onclick = () => get_invoices(filter.filterparam, page);
 		filter_buttons.push(button);
 	}
 
 	let $table_wrapper = $(`<div style="margin-top: 10px;" id="invoice-table"></div>`);
 	page.body.append($table_wrapper);
-
-	const table_data = [];
 
 	// Initialize the DataTable
 	datatable = new frappe.DataTable($table_wrapper.get(0), {
@@ -161,6 +164,10 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 		datatable.setDimensions();
 		current_filter_param = invoice_filters[0].filterparam;
 		refresh_invoices(page);
+	});
+
+	window.addEventListener('resize', () => {
+		datatable.refresh(table_data, table_columns);
 	});
 };
 
@@ -220,7 +227,8 @@ const get_invoices = (filter_param, page) => {
 		callback: function (r) {
 			is_fetching = false;
 			if (r && r.message && r.message.length !== undefined) {
-				datatable.refresh(r.message, table_columns);
+				table_data = r.message;
+				datatable.refresh(table_data, table_columns);
 			} else {
 				frappe.throw(r.message.error ?? "Error: Could not get a response from the server.");
 			}
