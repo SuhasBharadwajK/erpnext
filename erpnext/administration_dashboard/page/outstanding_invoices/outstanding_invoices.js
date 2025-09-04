@@ -168,7 +168,7 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 
 	window.addEventListener('resize', () => {
 		datatable.refresh(table_data, table_columns);
-	});
+	}, true);
 };
 
 const set_page_title = (page) => {
