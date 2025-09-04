@@ -1,3 +1,9 @@
 .title-text {
 	max-width: 35vw !important;
 }
+
+.filter-button-container .filter-button {
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	overflow: hidden;
+}

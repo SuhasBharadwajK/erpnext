@@ -3,6 +3,8 @@ let current_filter_param = "";
 let is_fetching = false;
 
 const all_invoices_filter = "all";
+const week_invoices_filter = "week";
+const undue_invoices_filter = "undue";
 const one_month_filter = "30";
 const two_months_filter = "60";
 const three_months_filter = "90";
@@ -18,11 +20,11 @@ const table_columns = [
 		format: (value) => `<a href="/app/purchase-invoice/${value}" target="_blank">${value}</a>`,
 	},
 	{
-		name: __("Due Date"),
+		name: __("Invoice Date"),
 		id: "posting_date",
 		editable: false,
 		resizable: false,
-		format: (value, _, __, doc) => frappe.format(value, { fieldtype: 'Date' }, null, doc),
+		format: (value) => frappe.format(value, { fieldtype: 'Date' }),
 	},
 	{
 		name: __("Party"),
@@ -64,7 +66,7 @@ const table_columns = [
 		id: "due_date",
 		editable: false,
 		resizable: false,
-		format: (value, _, __, doc) => frappe.format(value, { fieldtype: 'Date' }, null, doc),
+		format: (value) => frappe.format(value, { fieldtype: 'Date' }),
 	},
 ];
 
@@ -75,22 +77,32 @@ const invoice_filters = [
 		filterparam: all_invoices_filter,
 	},
 	{
-		label: "0 - 30 days",
+		label: "Not due yet",
+		fieldname: "undue-invoices",
+		filterparam: undue_invoices_filter,
+	},
+	{
+		label: "Due this week",
+		fieldname: "week-invoices",
+		filterparam: week_invoices_filter,
+	},
+	{
+		label: "0 - 30 days old",
 		fieldname: "one-month-old",
 		filterparam: one_month_filter,
 	},
 	{
-		label: "31 - 60 days",
+		label: "31 - 60 days old",
 		fieldname: "two-months-old",
 		filterparam: two_months_filter,
 	},
 	{
-		label: "61 - 90 days",
+		label: "61 - 90 days old",
 		fieldname: "three-months-old",
 		filterparam: three_months_filter,
 	},
 	{
-		label: "91 - 120 days",
+		label: "91 - 120 days old",
 		fieldname: "four-months-old",
 		filterparam: four_months_filter,
 	},
@@ -100,6 +112,8 @@ const invoice_filters = [
 		filterparam: oldest_filter,
 	},
 ];
+
+let table_data = [];
 
 frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 	var page = frappe.ui.make_app_page({
@@ -124,14 +138,15 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 			fieldname: filter.fieldname,
 		});
 
+		$(button.wrapper).addClass('filter-button-container');
+		$(button.wrapper).find('button').addClass('filter-button');
+
 		button.onclick = () => get_invoices(filter.filterparam, page);
 		filter_buttons.push(button);
 	}
 
 	let $table_wrapper = $(`<div style="margin-top: 10px;" id="invoice-table"></div>`);
 	page.body.append($table_wrapper);
-
-	const table_data = [];
 
 	// Initialize the DataTable
 	datatable = new frappe.DataTable($table_wrapper.get(0), {
@@ -140,6 +155,7 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 		cellHeight: 35,
 		columns: table_columns,
 		serialNoColumn: false,
+		noDataMessage: "No data found",
 		layout: "ratio",
 	});
 
@@ -149,6 +165,10 @@ frappe.pages["outstanding-invoices"].on_page_load = function (wrapper) {
 		current_filter_param = invoice_filters[0].filterparam;
 		refresh_invoices(page);
 	});
+
+	window.addEventListener('resize', () => {
+		datatable.refresh(table_data, table_columns);
+	}, true);
 };
 
 const set_page_title = (page) => {
@@ -199,17 +219,19 @@ const get_invoices = (filter_param, page) => {
 		method: "erpnext.administration_dashboard.page.outstanding_invoices.outstanding_invoices.get_invoices",
 		args: {
 			filter_param,
+			start: 1,
+			limit: 100,
 		},
 		freeze: true,
 		freeze_message: __('Getting the requested outstanding invoices...'),
 		callback: function (r) {
-			if (r.message) {
-				datatable.refresh(r.message, table_columns);
-			} else {
-				frappe.msgprint("Error: Could not get a response from the server.");
-			}
-
 			is_fetching = false;
+			if (r && r.message && r.message.length !== undefined) {
+				table_data = r.message;
+				datatable.refresh(table_data, table_columns);
+			} else {
+				frappe.throw(r.message.error ?? "Error: Could not get a response from the server.");
+			}
 		},
 	});
 };
