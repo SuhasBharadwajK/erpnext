@@ -13627,8 +13627,16 @@
   "title": "Financial Reports"
  },
  {
-  "charts": [],
-  "content": "[{\"id\":\"2J5JqDTMTD\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h2\\\">Administration</span>\",\"col\":12}},{\"id\":\"i5ZPx3NlaG\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"invoice_widget\",\"col\":12}}]",
+  "charts": [
+   {
+    "chart_name": "Forecast",
+    "label": "Finance Forecast",
+    "parent": "Administration",
+    "parentfield": "charts",
+    "parenttype": "Workspace"
+   }
+  ],
+  "content": "[{\"id\":\"2J5JqDTMTD\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h2\\\">Administration</span>\",\"col\":12}},{\"id\":\"i5ZPx3NlaG\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"invoice_widget\",\"col\":12}},{\"id\":\"Zmv-hP1nH6\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Finance Forecast\",\"col\":12}}]",
   "custom_blocks": [
    {
     "custom_block_name": "Outstanding_Invoice_Widget",
@@ -13647,7 +13655,7 @@
   "is_hidden": 0,
   "label": "Administration",
   "links": [],
-  "modified": "2025-09-04 17:26:21.090865",
+  "modified": "2025-09-08 17:21:28.363342",
   "module": null,
   "name": "Administration",
   "number_cards": [],
