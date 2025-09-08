@@ -13636,7 +13636,7 @@
     "parenttype": "Workspace"
    }
   ],
-  "content": "[{\"id\":\"2J5JqDTMTD\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h2\\\">Administration</span>\",\"col\":12}},{\"id\":\"i5ZPx3NlaG\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"invoice_widget\",\"col\":12}},{\"id\":\"Zmv-hP1nH6\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Finance Forecast\",\"col\":12}}]",
+  "content": "[{\"id\":\"2J5JqDTMTD\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h2\\\">Administration</span>\",\"col\":12}},{\"id\":\"i5ZPx3NlaG\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"invoice_widget\",\"col\":12}},{\"id\":\"Zmv-hP1nH6\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Finance Forecast\",\"col\":12}},{\"id\":\"rfoKBonOwp\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h3\\\">Bank Balance</span>\",\"col\":12}},{\"id\":\"Tgy-LyxDh7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"IDBI Bank\",\"col\":4}},{\"id\":\"aFJNTAxUYA\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"UBI Bank\",\"col\":4}},{\"id\":\"IIQdv-3Zde\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"HDFC Bank\",\"col\":4}}]",
   "custom_blocks": [
    {
     "custom_block_name": "Outstanding_Invoice_Widget",
@@ -13655,10 +13655,32 @@
   "is_hidden": 0,
   "label": "Administration",
   "links": [],
-  "modified": "2025-09-08 17:21:28.363342",
+  "modified": "2025-09-08 19:28:03.310610",
   "module": null,
   "name": "Administration",
-  "number_cards": [],
+  "number_cards": [
+   {
+    "label": "IDBI Bank",
+    "number_card_name": "IDBI Bank",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "UBI Bank",
+    "number_card_name": "UBI Bank",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "HDFC Bank",
+    "number_card_name": "HDFC Bank",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   }
+  ],
   "parent_page": "",
   "public": 1,
   "quick_lists": [],
