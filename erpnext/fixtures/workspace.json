@@ -13629,23 +13629,22 @@
  {
   "charts": [
    {
-    "chart_name": "Forecast",
-    "label": "Finance Forecast",
+    "chart_name": "Total Forecast",
+    "label": "Total Finance Forecast",
+    "parent": "Administration",
+    "parentfield": "charts",
+    "parenttype": "Workspace"
+   },
+   {
+    "chart_name": "Weekly Forecast",
+    "label": "Weekly Finance Forecast",
     "parent": "Administration",
     "parentfield": "charts",
     "parenttype": "Workspace"
    }
   ],
-  "content": "[{\"id\":\"2J5JqDTMTD\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h2\\\">Administration</span>\",\"col\":12}},{\"id\":\"i5ZPx3NlaG\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"invoice_widget\",\"col\":12}},{\"id\":\"Zmv-hP1nH6\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Finance Forecast\",\"col\":12}},{\"id\":\"rfoKBonOwp\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h3\\\">Bank Balance</span>\",\"col\":12}},{\"id\":\"Tgy-LyxDh7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"IDBI Bank\",\"col\":4}},{\"id\":\"aFJNTAxUYA\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"UBI Bank\",\"col\":4}},{\"id\":\"IIQdv-3Zde\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"HDFC Bank\",\"col\":4}}]",
-  "custom_blocks": [
-   {
-    "custom_block_name": "Outstanding_Invoice_Widget",
-    "label": "invoice_widget",
-    "parent": "Administration",
-    "parentfield": "custom_blocks",
-    "parenttype": "Workspace"
-   }
-  ],
+  "content": "[{\"id\":\"2J5JqDTMTD\",\"type\":\"header\",\"data\":{\"text\":\"<span style=\\\"font-size: 24px;\\\"><b>Forecasting</b></span>\",\"col\":12}},{\"id\":\"rfoKBonOwp\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h3\\\">Bank Balance</span>\",\"col\":12}},{\"id\":\"Tgy-LyxDh7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"IDBI Bank\",\"col\":4}},{\"id\":\"aFJNTAxUYA\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"UBI Bank\",\"col\":4}},{\"id\":\"IIQdv-3Zde\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"HDFC Bank\",\"col\":4}},{\"id\":\"vDDB0QBNyl\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h3\\\">Forecasting This Week</span>\",\"col\":12}},{\"id\":\"ZlQscneJtC\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Weekly Finance Forecast\",\"col\":12}},{\"id\":\"cLEbGy-hC-\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Weekly Invoices Due\",\"col\":4}},{\"id\":\"2RUMocIxqb\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Weekly Vendor Advance Due\",\"col\":4}},{\"id\":\"MdA-urmvvV\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Weekly EMI & Bank Charges Due\",\"col\":4}},{\"id\":\"zYPFADu38Z\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Factory Indents\",\"col\":4}},{\"id\":\"O6NnAehbq9\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Payroll\",\"col\":4}},{\"id\":\"6exJl19Xe-\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Others\",\"col\":4}},{\"id\":\"Q_SHRa7RXs\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Receivables Due\",\"col\":4}},{\"id\":\"1wQ3Sl94vh\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Weekly GST Refunds Due\",\"col\":4}},{\"id\":\"SC3TSz1zgj\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"MlwR048hqM\",\"type\":\"paragraph\",\"data\":{\"text\":\"<span class=\\\"h3\\\">Total Forecasting&nbsp;</span>\",\"col\":12}},{\"id\":\"SSWh9bTJoI\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Total Finance Forecast\",\"col\":12}},{\"id\":\"WiZqn2oZgB\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Overall Invoice Due\",\"col\":4}},{\"id\":\"tOY5Zw3r17\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Overall Vendor Advances Due\",\"col\":4}},{\"id\":\"oODx_NBR6i\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Overall EMI & Bank Charges Due\",\"col\":4}},{\"id\":\"MAZDCmLQIW\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Overall Receivables Due\",\"col\":4}},{\"id\":\"ic45x5eAGd\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Overall GST Refunds Due\",\"col\":4}}]",
+  "custom_blocks": [],
   "docstatus": 0,
   "doctype": "Workspace",
   "for_user": "",
@@ -13655,13 +13654,76 @@
   "is_hidden": 0,
   "label": "Administration",
   "links": [],
-  "modified": "2025-09-08 19:28:03.310610",
+  "modified": "2025-09-11 12:24:07.374476",
   "module": null,
   "name": "Administration",
   "number_cards": [
    {
+    "label": "Receivables Due",
+    "number_card_name": "Weekly Receivables Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Factory Indents",
+    "number_card_name": "Factory Indents",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Weekly Invoices Due",
+    "number_card_name": "Weekly Invoices Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
     "label": "IDBI Bank",
     "number_card_name": "IDBI Bank",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Overall Invoice Due",
+    "number_card_name": "Overall Invoice Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Weekly GST Refunds Due",
+    "number_card_name": "Weekly GST Refunds Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Overall Receivables Due",
+    "number_card_name": "Overall Receivables Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Overall GST Refunds Due",
+    "number_card_name": "Overall GST Refunds Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Payroll",
+    "number_card_name": "Payroll",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Weekly Vendor Advance Due",
+    "number_card_name": "Weekly Vendor Advance Due",
     "parent": "Administration",
     "parentfield": "number_cards",
     "parenttype": "Workspace"
@@ -13676,6 +13738,34 @@
    {
     "label": "HDFC Bank",
     "number_card_name": "HDFC Bank",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Overall Vendor Advances Due",
+    "number_card_name": "Overall Vendor Advances Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Overall EMI & Bank Charges Due",
+    "number_card_name": "Overall EMI & Bank Charges Due",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Others",
+    "number_card_name": "Others",
+    "parent": "Administration",
+    "parentfield": "number_cards",
+    "parenttype": "Workspace"
+   },
+   {
+    "label": "Weekly EMI & Bank Charges Due",
+    "number_card_name": "Weekly EMI & Bank Charges Due",
     "parent": "Administration",
     "parentfield": "number_cards",
     "parenttype": "Workspace"
