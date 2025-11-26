@@ -1,6 +1,8 @@
 // Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 // License: GNU General Public License v3. See license.txt
 
+// Changes added by India Compliance: Is Reverse Charge, Supplier GSTIN
+
 frappe.provide("erpnext.accounts");
 
 cur_frm.cscript.tax_table = "Purchase Taxes and Charges";
@@ -45,6 +47,12 @@ erpnext.accounts.PurchaseInvoice = class PurchaseInvoice extends erpnext.buying.
 
 	onload() {
 		super.onload();
+
+		// If the current document is saved (as indicated by non-null title) as a return invoice,
+		// the property cannot be reset on the invoice, to ensure data consistency with the name.
+		if (this.frm.doc && this.frm.doc.is_return && this.frm.doc.title) {
+			this.frm.set_df_property("is_return", "read_only", 1);
+		}
 
 		// Ignore linked advances
 		this.frm.ignore_doctypes_on_cancel_all = [
@@ -591,6 +599,7 @@ cur_frm.fields_dict["items"].grid.get_field("project").get_query = function (doc
 	};
 };
 
+
 frappe.ui.form.on("Purchase Invoice", {
 	setup: function (frm) {
 		frm.custom_make_buttons = {
@@ -635,6 +644,14 @@ frappe.ui.form.on("Purchase Invoice", {
 
 	refresh: function (frm) {
 		frm.events.add_custom_buttons(frm);
+	},
+
+	// Before the document is saved, set "RET" in the naming series to indicate a return invoice.
+	before_save: function (frm) {
+		if (frm.doc && frm.doc.is_return && !frm.title) {
+			const comp_array = frm.doc.naming_series.split('-');
+			frm.doc.naming_series = comp_array.toSpliced(comp_array.length - 2, 0, "RET").join('-')
+		}
 	},
 
 	mode_of_payment: function (frm) {
