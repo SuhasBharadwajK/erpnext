@@ -1,5 +1,204 @@
-// Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
-// For license information, please see license.txt
+// =======================================================
+// Warehouse Flow (Loaded from Backend)
+// =======================================================
+let WAREHOUSE_FLOW = {};
+
+// Load flow from server
+function load_warehouse_flow() {
+	return frappe.call({
+		method: "erpnext.manufacturing.doctype.work_order.warehouse_order.get_warehouse_flow"
+	}).then(r => {
+		WAREHOUSE_FLOW = r.message || {};
+	});
+}
+
+// =======================================================
+// Helpers
+// =======================================================
+
+// MATCH BY KEYWORD CONTAINED IN ITEM TO MANUFACTURE
+function find_flow_by_production_item(item_code) {
+	if (!item_code) return null;
+
+	const item_name = item_code.trim().toLowerCase();
+
+	for (const keyword in WAREHOUSE_FLOW) {
+		if (item_name.includes(keyword.trim().toLowerCase())) {
+			return WAREHOUSE_FLOW[keyword];
+		}
+	}
+	return null;
+}
+
+// Set warehouse only if it exists and Prevents errors if warehouse name is wrong
+function set_if_exists(frm, fieldname, warehouse) {
+	if (!warehouse) return;
+
+	frappe.call({
+		method: "frappe.client.get_value",
+		args: {
+			doctype: "Warehouse",
+			filters: { name: warehouse },
+			fieldname: "name"
+		},
+		callback(r) {
+			if (r.message) {
+				frm.set_value(fieldname, warehouse);
+			} else {
+				frappe.msgprint({
+					message: __("Mapped warehouse '{0}' not found.", [warehouse]),
+					indicator: "orange"
+				});
+			}
+		}
+	});
+}
+
+// Apply mapping safely (BOM loads async)
+function apply_warehouse_flow(frm, mapping) {
+	if (!mapping) return;
+
+	// Header warehouses
+	set_if_exists(frm, "source_warehouse", mapping.source_warehouse);
+	set_if_exists(frm, "wip_warehouse", mapping.wip_warehouse);
+	set_if_exists(frm, "fg_warehouse", mapping.target_warehouse);
+
+// Retry for BOM child table
+// Checks if Bom items are loaded as BOM items (required_items) do not load immediately
+// if not waits for 300 secs and tries again if loaded then loads warehouses
+
+	let attempts = 0;
+	const maxAttempts = 10;
+
+	const apply_child = () => {
+		attempts++;
+
+		if (frm.doc.required_items && frm.doc.required_items.length) {
+			if (mapping.source_warehouse) {
+				frm.doc.required_items.forEach(row => {
+					frappe.model.set_value(
+						row.doctype,
+						row.name,
+						"source_warehouse",
+						mapping.source_warehouse
+					);
+				});
+				frm.refresh_field("required_items");
+			}
+		} else if (attempts < maxAttempts) {
+			setTimeout(apply_child, 300);
+		}
+	};
+
+	apply_child();
+}
+
+// Used when Work Order is created from Production Plan here we're stopping 
+// normal working of production plan so that production_item event does NOT fire
+function apply_flow_when_ready(frm) {
+	if (!frm.doc.production_item || !Object.keys(WAREHOUSE_FLOW).length) return;
+
+	const mapping = find_flow_by_production_item(frm.doc.production_item);
+	if (mapping) {
+		apply_warehouse_flow(frm, mapping);
+	}
+}
+
+// =======================================================
+// Work Order
+// =======================================================
+frappe.ui.form.on("Work Order", {
+	setup(frm) {
+		load_warehouse_flow();
+	},
+
+	onload(frm) {
+		// Wait and if production_item exists then backend warehouse flow loaded
+		setTimeout(() => {
+			apply_flow_when_ready(frm);
+		}, 500);
+	},
+
+	// Manual selection in Work Order
+	production_item(frm) {
+		if (!frm.doc.production_item) return;
+
+		frappe.call({
+			method: "erpnext.manufacturing.doctype.work_order.work_order.get_item_details",
+			args: {
+				item: frm.doc.production_item,
+				project: frm.doc.project
+			},
+			freeze: true,
+			callback(r) {
+				if (!r.message) return;
+
+				[
+					"description",
+					"stock_uom",
+					"project",
+					"bom_no",
+					"allow_alternative_item",
+					"transfer_material_against",
+					"item_name"
+				].forEach(f => frm.set_value(f, r.message[f]));
+
+				const mapping = find_flow_by_production_item(frm.doc.production_item);
+				if (mapping) {
+					apply_warehouse_flow(frm, mapping);
+				}
+			}
+		});
+	},
+
+	// Re-apply after BOM loads
+	bom_no(frm) {
+		frm.call({
+			doc: frm.doc,
+			method: "get_items_and_operations_from_bom",
+			freeze: true,
+			callback() {
+				const mapping = find_flow_by_production_item(frm.doc.production_item);
+				if (mapping) {
+					apply_warehouse_flow(frm, mapping);
+				}
+			}
+		});
+	}
+});
+
+// =======================================================
+// Child Table
+// =======================================================
+frappe.ui.form.on("Work Order Item", {
+	source_warehouse(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.item_code || !row.source_warehouse) return;
+
+		frappe.call({
+			method: "erpnext.stock.utils.get_latest_stock_qty",
+			args: {
+				item_code: row.item_code,
+				warehouse: row.source_warehouse
+			},
+			callback(r) {
+				frappe.model.set_value(
+					cdt,
+					cdn,
+					"available_qty_at_source_warehouse",
+					r.message
+				);
+			}
+		});
+	}
+});
+
+
+
+
+
+
+// App code below this line remains unchanged
 
 frappe.ui.form.on("Work Order", {
 	setup: function (frm) {
