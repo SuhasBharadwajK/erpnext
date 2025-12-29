@@ -10,6 +10,7 @@ from frappe.model.document import Document
 from frappe.model.mapper import get_mapped_doc
 from frappe.query_builder import Case
 from frappe.query_builder.functions import Sum
+from erpnext.manufacturing.doctype.work_order.warehouse_order import apply_warehouse_flow_to_work_order
 from frappe.utils import (
 	cint,
 	date_diff,
@@ -1169,6 +1170,8 @@ class WorkOrder(Document):
 						self.project = item.get("project")
 
 			self.set_available_qty()
+
+			apply_warehouse_flow_to_work_order(self)
 
 	def update_transferred_qty_for_required_items(self):
 		ste = frappe.qb.DocType("Stock Entry")

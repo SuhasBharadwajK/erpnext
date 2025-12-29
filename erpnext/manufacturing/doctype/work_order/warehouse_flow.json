@@ -1,0 +1,23 @@
+{
+  "Mixer": {
+    "source_warehouse": "Stores - BC",
+    "wip_warehouse": "Mixer Warehouse - BC",
+    "target_warehouse": "Mixer Warehouse - BC"
+  },
+  "Distribution": {
+    "source_warehouse": "Mixer Warehouse - BC",
+    "wip_warehouse": "Distribution Warehouse - BC",
+    "target_warehouse": "Pressing Warehouse - BC"
+  },
+  "Pressing": {
+    "source_warehouse": "Pressing Warehouse - BCD",
+    "wip_warehouse": "Pressing Warehouse - BCD",
+    "target_warehouse": "Heating Warehouse - BCD"
+  },
+  "Quality Check": {
+    "source_warehouse": "Quality Check Warehouse - BCD",
+    "wip_warehouse": "Quality Check Warehouse - BCD",
+    "target_warehouse": "Quarantine FG Warehouse (Approved)",
+    "rejected_warehouse": "Rejected Warehouse"
+  }
+}
