@@ -51,6 +51,12 @@ def checkout_slab(slab_number: str):
 	last_history.out_time = datetime.now()
 	last_history.total_time_in_minutes = (last_history.out_time - last_history.in_time).total_seconds() / 60  # pyright: ignore[reportOperatorIssue]
 
+	if slab.status == "Quarantine":
+		# Get Mahi Granites Settings to check if the slab is quarantined prematurely.
+		settings = frappe.get_single("Mahi Granites Settings")
+		if settings.min_quarantine_hours > (last_history.out_time - last_history.in_time).total_seconds() / 3600:
+			slab.is_prematurely_unquarantined = True
+
 	slab.is_cur_stage_complete = True
 
 	# TODO: Remove ignore_permissions after testing.
@@ -107,6 +113,16 @@ def move_slab_to(
 
 	# TODO: Remove ignore_permissions after testing.
 	slab.save(ignore_permissions=True)
+	frappe.publish_realtime("slab_move", slab, user=frappe.session.user)
+
+
+@frappe.whitelist()
+def get_slabs_in(line: str, current_stage: str) -> list[dict]:
+	return frappe.db.get_list(
+		"Slab",
+		filters={"line": line, "status": current_stage, "is_cur_stage_complete": False},
+		fields=["name", "number", "serial_number", "status", "line", "batch_number", "template", "creation", "modified"],
+	)
 
 
 @frappe.whitelist(allow_guest=True)
