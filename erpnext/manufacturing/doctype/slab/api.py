@@ -83,7 +83,7 @@ def move_slab_to(
 
     slab = frappe.get_doc("Slab", slab_number)
 
-    current_stage_index = allowed_stages_lower.index(slab.current_stage.lower())
+    current_stage_index = allowed_stages_lower.index(slab.status.lower())
     next_stage_index = allowed_stages_lower.index(next_stage.lower())
 
     # Validation: Check the direction of transition
@@ -106,7 +106,7 @@ def move_slab_to(
 
     slab.status = next_stage  # pyright: ignore[reportAttributeAccessIssue]
     slab.is_cur_stage_complete = False
-    slab.current_stage = ALLOWED_STAGES[next_stage_index]  # pyright: ignore[reportAttributeAccessIssue]
+    slab.status = ALLOWED_STAGES[next_stage_index]  # pyright: ignore[reportAttributeAccessIssue]
     slab.current_job_card = job_card_number
 
     # Append the next stage to the slab history.
@@ -127,11 +127,11 @@ def move_slab_to(
 def get_slabs_for(line: str, next_stage: str) -> list[dict]:
     # Determine valid previous stages based on the next_stage and rules
     valid_previous_stages = []
-    
+
     # Check if next_stage is valid
     if next_stage in ALLOWED_STAGES:
         target_index = ALLOWED_STAGES.index(next_stage)
-        
+
         # Special handling for Heating (Pressing -> Heating, Re-pressing -> Heating)
         if next_stage == "Heating":
             valid_previous_stages = ["Pressing", "Re-pressing"]
@@ -202,7 +202,7 @@ def _get_slab_number():
 def get_all_existing_slabs(stage):
     slabs = frappe.get_all("Slab",
     filters={
-            "current_stage": stage,      
+            "current_stage": stage,
             "docstatus": 0,              
         },
         fields=[
