@@ -1,0 +1,671 @@
+<script setup>
+import { ref, computed, onMounted } from 'vue';
+
+const jobCardName = ref(null);
+const jobCardDoc = ref(null);
+const status = ref('Pending');
+const serial = ref('SLB-2025-00427');
+const colour = ref('');
+
+const processStarted = ref(false);
+const processStartTime = ref(null);
+const processElapsed = ref(0);
+const processTimerHandle = ref(null);
+const processReady = ref(true);
+
+const slabsQueue = ref([]);
+const slabCreated = ref(false);
+const slabNumber = ref(null);
+const jobcardsQueue = ref([]);
+const jobCardSubmitted = ref(false);
+const preparedQty = ref(0);
+const stockEntryName = ref('');
+const transferredQty = ref(0);     
+const transferSuccess = ref(false); 
+const nextWorkOrder = ref(''); 
+const bomNo = ref('Loading...');
+const bomQty = ref(0);
+const slabTemplate = ref('');  
+const line = ref(null);
+const error = ref(null);              
+const batchNo = ref(null);
+const currentStation = ref('');
+const operationMapping = ref({
+    "mixing": "distribution",
+    "distribution": "pressing", 
+    "pressing": "heating",
+    "heating": "cooling",
+    "cooling": "trimming",
+    "trimming": "calibration",
+    "calibration": "polishing",
+    "polishing": "quality analysis"
+});
+
+const alarms = ref([
+  {
+    station: 'Polishing 1',
+    type: 'QUALITY ISSUE',
+    description: 'Surface defect detected on SLB-2025-00425',
+    time: '14:23:15',
+    tone: 'danger'
+  },
+  {
+    station: 'Trimmer',
+    type: 'MACHINE PROBLEM',
+    description: 'Blade alignment issue',
+    time: '14:15:42',
+    tone: 'warning'
+  }
+]);
+
+// UI flags
+const showStartButton = ref(true);
+const showAlarms = ref(true);
+
+// Raise‑alarm dialog
+const issueDialogOpen = ref(false);
+const issueType = ref('Quality Issue');
+const issueDescription = ref('');
+
+// formatted timer
+const formattedTime = computed(() => {
+  const h = String(Math.floor(processElapsed.value / 3600)).padStart(2, '0');
+  const m = String(Math.floor((processElapsed.value % 3600) / 60)).padStart(2, '0');
+  const s = String(processElapsed.value % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+});
+
+const props = defineProps({
+    process: {
+        type: String,
+        default: 'operator'
+    },
+    job_card: {
+        type: String,
+        default: null
+    }
+});
+
+// actions
+onMounted(async () => {
+  try {
+    const route = frappe.get_route();
+    const station = route[1] || props.process;
+    jobCardName.value = route[2] || props.job_card;
+
+    if (!jobCardName.value) {
+      error.value = __('No Job Card found in route');
+      return;
+    }
+
+    const jc = await frappe.db.get_doc('Job Card', jobCardName.value);
+    jobCardDoc.value = jc;  
+    
+    if (jc.bom_no) {
+      const bom = await frappe.db.get_doc('BOM', jc.bom_no);
+      batchNo.value = jc.bom_no;
+      if (bom.slab_template) {
+        slabTemplate.value = bom.slab_template;
+      }
+    }
+
+    jobCardSubmitted.value = jc.docstatus === 1 || jc.status === 'Completed';
+    if (jobCardSubmitted.value) {
+      preparedQty.value = jc.total_completed_qty || jc.for_quantity || 0;
+    }
+    await slabInfo(jc, station);
+    const stateRes = await frappe.call({
+      method: 'erpnext.manufacturing.page.operator_station.operator_station.get_operator_state',
+      args: { 
+        job_card: jobCardName.value, 
+        process_name: station 
+      }
+    });
+    
+    const state = stateRes.message || {};
+    // processStarted.value = !!state[`${station}_started`];
+    status.value = state.status || 'Pending';
+    
+    // Logic to set UI flags based on EXPLICIT backend status
+    if (status.value === 'Work In Progress') {
+      processStarted.value = true;
+      showStartButton.value = false;
+      processReady.value = true;
+    } else if (status.value === 'Completed') {
+      processStarted.value = false;
+      showStartButton.value = false;
+      processReady.value = false;
+      jobCardSubmitted.value = true;
+    } else if (status.value === 'Cancelled' || status.value === 'Discarded') {
+      processStarted.value = false;
+      showStartButton.value = false;
+      processReady.value = false;
+    } else {
+      // Open / Pending
+      processStarted.value = false;
+      showStartButton.value = true;
+      processReady.value = true;
+    }
+
+    processStartTime.value = state[`${station}_start_time`];
+    // jobCardSubmitted.value = !!state.job_card_submitted || jobCardSubmitted.value;
+    if (jobCardSubmitted.value) {
+      stockEntryName.value = state.stock_entry_name || '';
+    }
+
+    if (processStarted.value && processStartTime.value) {
+      const start = frappe.datetime.str_to_obj(processStartTime.value);
+      const now = frappe.datetime.now_datetime();
+      const diffSeconds = (new Date(now) - new Date(start)) / 1000;
+      processElapsed.value = Math.max(0, Math.floor(diffSeconds));
+
+      if (processTimerHandle.value) clearInterval(processTimerHandle.value);
+      processTimerHandle.value = setInterval(() => {
+        processElapsed.value += 1;
+      }, 1000);
+    } else {
+      processElapsed.value = 0;
+      if (processTimerHandle.value) {
+        clearInterval(processTimerHandle.value);
+        processTimerHandle.value = null;
+      }
+    }
+    
+    // Fetch Slab Queue
+    await fetchQueue(line.value || jc.production_line, station);
+  } catch (e) {
+    error.value = e.message;
+    frappe.msgprint(__('Load failed: {0}', [e.message]));
+  }
+});
+
+const isDistribution = computed(() => currentStation.value === 'distribution');
+
+async function fetchQueue(line, station) {
+  currentStation.value = station.toLowerCase();
+  try {
+    if (currentStation.value === 'distribution') {
+      jobcardsQueue.value = [];
+        const jobcardsMethod = await frappe.call({
+            method: 'erpnext.manufacturing.page.operator_station.operator_station.get_open_job_cards',
+            args: { process: station }
+        });
+        if (jobcardsMethod.message) {
+            jobcardsQueue.value = jobcardsMethod.message || [];
+        }
+    } 
+    else {  
+      slabsQueue.value = [];
+        const result = await frappe.call({
+          method: 'erpnext.manufacturing.doctype.slab.api.get_slabs_for',
+          args: {
+              line: line,
+              next_stage: station
+          }
+        });
+        debugger;
+      if (result.message) {
+        slabsQueue.value = result.message || [];
+      }
+    }
+    for (const jobcard of jobcardsQueue.value) {
+      console.log(jobcard);
+    }
+    console.log("Jobcards queue data:", jobcardsQueue.value);
+
+    for (const slab of slabsQueue.value) {
+      console.log(slab);
+    }
+    console.log("Slabs queue data:", slabsQueue.value);
+  } catch (e) {
+    console.error('Failed to fetch queue:', e);
+  }
+}
+
+async function createSlab(line) {
+  if (!jobCardDoc.value || slabCreated.value || !slabTemplate.value) return
+  
+  try {
+    const result = await frappe.call({
+      method: "erpnext.manufacturing.doctype.slab.api.create_slab",
+      args: { 
+        line: line || 'L1',
+        type: slabTemplate.value,
+        job_card_number: jobCardDoc.value.name,
+      }
+    });
+    if(result)
+    {
+      jobCardDoc.value.slab = result.message?.serial_number;
+    }
+    slabCreated.value = true;
+    slabNumber.value = result.message?.serial_number;
+    batchNo.value = result.message?.batch_number;
+    colour.value = result.message?.template;
+  } catch (e) {
+    frappe.msgprint(__('Slab creation failed: {0}', [e.message]));
+  }
+}
+
+async function slabInfo(jc, station) {
+  if (!jc) return;
+  const jcSlabRes = await frappe.call({
+    method: 'erpnext.manufacturing.doctype.slab.api.get_slab_for_job_card',
+    args: { job_card: jc.name }
+  });
+  let slab = jcSlabRes.message;
+    
+  debugger;
+  // If no slab found for this specific Job Card, check if there's one coming from the previous stage
+  if (!slab && station.toLowerCase() === 'distribution') {
+    await createSlab(jc.production_line);
+    return;
+  }
+  if(!slab){
+    frappe.msgprint({
+      title: 'No Slab Found',
+      message: `No available slab found from the previous stage for this Work Order. Ensure the previous step is completed.`,
+      indicator: 'orange'
+    });
+  }
+    // Populate UI
+    slabCreated.value = true;
+    slabNumber.value = slab.serial_number || slab.name;
+    batchNo.value = slab.batch_number || batchNo.value;
+    slabTemplate.value = slab.template || slabTemplate.value;
+    colour.value = slab.template || colour.value;
+    line.value = slab.line || jc.production_line;
+    
+    frappe.show_alert(`✅ Slab ${slabNumber.value} @ ${station}`, 'green');
+  } 
+
+async function startOperation() {
+  const route = frappe.get_route();
+    const station = route[1] || props.process;
+    jobCardName.value = route[2] || props.job_card;
+    frappe.confirm(
+        __('Start Distribution now?'),
+        async () => {
+            try {
+                await frappe.call({
+                    method: 'erpnext.manufacturing.page.operator_station.operator_station.start_distribution',
+                    args: { 
+                      job_card: jobCardName.value,
+                      process_name: station
+                     }
+                });
+                status.value = 'In Progress';
+                showStartButton.value = false;
+                processStarted.value = true;
+                processStartTime.value = frappe.datetime.now_datetime();
+
+                processElapsed.value = 0;
+                if (processTimerHandle.value) {
+                    clearInterval(processTimerHandle.value);
+                }
+                processTimerHandle.value = setInterval(() => {
+                    processElapsed.value += 1;
+                }, 1000);
+    
+                frappe.msgprint(__('Process started'));
+            }
+            catch (e) {
+                frappe.msgprint(__('Failed to start Job Card: {0}', [e.message || e]));
+            }
+        },
+        () => {
+            frappe.msgprint(__('Process was not started.'));
+        }
+    );
+}
+
+async function finishOperation() {
+  const route = frappe.get_route();
+  const station = route[1] || props.process;
+  jobCardName.value = route[2] || props.job_card;
+  debugger;
+  if (processTimerHandle.value) {
+      clearInterval(processTimerHandle.value);
+      processTimerHandle.value = null;
+  }
+  debugger;
+  try {
+    const result = await frappe.call({
+        method: 'erpnext.manufacturing.page.operator_station.operator_station.finish_distribution',
+        args: {
+            job_card: jobCardName.value,
+            process_name: station
+        },
+    });
+    status.value = 'Finished';
+    processStarted.value = false;
+    processStartTime.value = null;
+    processElapsed.value = 0;
+    processReady.value = false;
+
+    jobCardSubmitted.value = true;
+    preparedQty.value = result.message.job_card_qty;
+    stockEntryName.value = result.message.stock_entry;
+    bomQty.value = result.message.bom_qty || 0;
+    nextWorkOrder.value = result.message.next_work_order || '';
+    transferredQty.value = 0;
+    transferSuccess.value = false;
+
+    frappe.msgprint(result.message.message);    
+    if (result.message.work_order_status === 'Completed') {
+        frappe.show_alert({
+            message: __('Work Order also Completed!'),
+            indicator: 'green'
+        });
+    }
+    transferToFGWarehouse();
+    //move slab to next station
+    await fetchQueue(line.value || jobCardDoc.value.production_line, station); 
+  }
+
+  catch (error) {
+    console.error('error.message:', error.message);
+    const errorMsg = error.message || (error._server_messages?.[0]?.message) || JSON.stringify(error);
+    frappe.msgprint({ 
+        title: __('Error'),
+        indicator: 'red',
+        message: `Failed to complete Job Card:<br><pre>${errorMsg}</pre>`
+    });
+  }
+}
+
+async function transferToFGWarehouse() {
+  try {
+    const jc = await frappe.db.get_doc('Job Card', jobCardName.value);
+    const workOrder = jc.work_order; 
+    
+    if (!workOrder) {
+        frappe.msgprint(__('Work Order required from Job Card'));
+        return;
+    }
+
+    const result = await frappe.call({
+        method: 'erpnext.manufacturing.page.operator_station.operator_station.transfer_to_next_process',
+        args: {
+            current_work_order: workOrder,  
+            qty: bomQty.value
+        },
+        freeze: true,
+        freeze_message: __('Transferring to Distribution')
+    });
+    
+    transferredQty.value += result.message.qty_transferred;   
+    frappe.msgprint({
+        title: __('Transfer Complete'),
+        message: result.message.message,
+        indicator: 'green'
+    });
+    
+    frappe.show_alert({
+        message: `Next: ${result.message.next_work_order}`,
+        indicator: 'blue'
+    });
+  } 
+  catch (error) {
+      frappe.msgprint(__('Transfer failed: {0}', [error.message]));
+  }
+}
+
+function haltJob() {
+  status.value = 'Halted';
+  if (processTimerHandle.value) {
+    clearInterval(processTimerHandle.value);
+    processTimerHandle.value = null;
+  }
+  frappe.msgprint(__('Job is halted'));
+}
+
+function discardJob() {
+  frappe.confirm(
+    __('Are you sure you want to discard this job?'),
+    () => {
+      stopAndResetTimer();
+      status.value = 'Pending'; // Reset to Pending so Start button appears
+      showStartButton.value = true;
+      processReady.value = true;
+      jobCardSubmitted.value = false;
+      frappe.msgprint(__('Job is discarded'));
+    }
+  );
+}
+
+function stopAndResetTimer() {
+    if (processTimerHandle.value) {
+        clearInterval(processTimerHandle.value);
+        processTimerHandle.value = null;
+    }
+    processStarted.value = false;
+    processElapsed.value = 0;
+    processStartTime.value = null;
+}
+
+function toggleAlarms() {
+  showAlarms.value = !showAlarms.value;
+}
+
+function openIssueDialog() {
+  issueDialogOpen.value = true;
+}
+
+function submitIssue() {
+  const now = frappe.datetime.now_time();
+  alarms.value.unshift({
+    station: 'Mixer',
+    type: issueType.value.toUpperCase(),
+    description: issueDescription.value,
+    time: now,
+    tone: 'warning'
+  });
+  issueDialogOpen.value = false;
+  issueDescription.value = '';
+  frappe.msgprint(__('Alarm submitted'));
+}
+
+function statusStyle() {
+  if (status.value === 'In Progress') {
+    return 'background:#d4f8d4;color:#137a13;padding:.5rem';
+  }
+  if (status.value === 'Finished') {
+    return 'background:#d1ecf1;color:#0c5460;padding:.5rem';
+  }
+  if (status.value === 'Halted') {
+    return 'background:#ffeeba;color:#856404;padding:.5rem';
+  }
+  if (status.value === 'Discarded') {
+    return 'background:#f8d7da;color:#721c24;padding:.5rem';
+  }
+  return 'background:#e9ecef;color:#6c757d;padding:.5rem';
+}
+</script>
+
+<template>
+  <div class="operator-station-container d-flex h-100 w-100">
+    <!-- Sidebar: Queue -->
+     
+    <div class="queue-sidebar bg-light border-right p-3" style="width: 300px; overflow-y: auto;">
+      <h5 class="mb-3 font-weight-bold text-center border-bottom pb-2">
+          {{ isDistribution ? __('Pending Job Cards') : __('Incoming Slabs') }}
+      </h5>
+      
+      <div v-if="jobcardsQueue.length === 0 && isDistribution" class="text-muted text-center py-4 bg-white rounded border">
+        <span class="fa fa-inbox fa-2x mb-2 d-block text-muted-light"></span>
+        {{ __('No Job cards in queue') }}
+      </div>
+
+      <div v-else>
+        <div v-for="item in jobcardsQueue" :key="item.name" class="card mb-2 shadow-sm slab-card border-0">
+          <div class="card-body p-3 border-left-3 d-flex flex-column justify-content-center align-items-start" style="height: 5rem">
+            <h5 class="card-title mb-1 font-weight-bold">{{ item.name }}</h5>
+            <div class="small text-muted">
+                <span class="fa fa-cubes mr-1"></span>{{ item.production_item }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>{{ slabsQueue.length }}</div>
+      <div v-if="false && slabsQueue.length === 0" class="text-muted text-center py-4 bg-white rounded border">
+        <span class="fa fa-inbox fa-2x mb-2 d-block text-muted-light"></span>
+        {{ __('No slabs in queue') }}
+      </div>
+      
+      <div v-else>
+        <div v-for="item in slabsQueue" :key="item.name" class="card mb-2 shadow-sm slab-card border-0">
+        <div class="card-body p-3 border-left-3 d-flex flex-column justify-content-center align-items-start" style="height: 5rem">
+          <template>
+            <h6 class="card-title mb-1 font-weight-bold">{{ item.batch_number }} - {{ item.serial_number }}</h6>
+            <div class="small text-muted mb-1">
+                <span class="fa fa-cube mr-1"></span>{{ item.template }}
+            </div>
+            <div class="mt-2 text-right">
+                <span class="badge badge-light border">{{ frappe.datetime.str_to_user(item.modified).split(" ")[1] }}</span>
+            </div>
+           </template>
+        </div>
+      </div>
+      </div>
+      
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="operator-station page-card d-flex flex-column align-items-center flex-grow-1 p-4" style="overflow-y: auto;">
+      <!-- Current Job Card -->
+      <div class="current-job-card mb-4 border border-dark w-50 rounded p-4" style="min-width: 650px;">
+        <div class="status text-center mb-2" style="font-size:1rem">
+          <span class="badge badge-pill" :style="statusStyle()">
+            {{ __(status) }}
+          </span>
+        </div>
+
+        <div class="text-center text-muted small">{{ __('SERIAL NUMBER') }}</div>
+        <h2 class="job-serial text-center font-weight-bold mb-2 p-3">
+          {{ batchNo }} - {{ slabNumber }}
+        </h2>
+        
+        <!-- <div class="text-center text-muted small mb-1">{{ __('Colour') }}</div> -->
+        <div class="d-flex justify-content-center align-items-center mb-3">
+          <span class="job-color bold mr-2" style="font-size:1rem">{{ colour }}</span>
+          <span class="color-swatch"
+                style="width:24px;height:24px;border-radius:4px;background:#f5f5f5;border:1px solid #ddd;"></span>
+        </div>     
+
+        <div class="text-center mb-2" v-if="processReady && showStartButton">
+          <button class="btn btn-success py-3 px-4" @click="startOperation">
+            <span class="fa fa-play mr-1 pr-2"></span>{{ __('Start Job') }}
+          </button>
+        </div>
+
+        <div class="text-center mb-3" v-if="processStarted && !jobCardSubmitted">
+          <div class="text-success" style="font-size:1.5rem">
+            <span class="fa fa-clock-o mr-1"></span>
+            <span class="job-timer">{{ formattedTime }}</span>
+          </div>
+        </div>
+
+        <div class="text-center mb-2" v-if="processStarted">
+          <button class="btn btn-info mr-2" @click="finishOperation">
+            <span class="fa fa-check-square-o mr-1"></span>{{ __('Finish Job') }}
+          </button>
+          <button class="btn btn-warning mr-2" @click="haltJob">
+            <span class="fa fa-pause-circle-o mr-1"></span>{{ __('Halt Job') }}
+          </button>
+          <button class="btn btn-danger" @click="discardJob">
+            <span class="fa fa-trash-o mr-1"></span>{{ __('Discard') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Raise Alarm -->
+      <div class="raise-alarm-box mb-4 w-50 border border-dark rounded p-4" style="min-width: 650px;">
+        <div class="d-flex flex-column justify-content-between mb-1 py-3">
+          <div class="d-flex align-items-center">
+            <span class="fa fa-exclamation-triangle mr-2"
+                  style="color:#ffc107; border:1px solid #ffc107; border-radius:50%; padding:4px;"></span>
+            <h5 class="mb-1">{{ __('Raise Alarm') }}</h5>
+          </div>
+          <div class="text-muted small">
+            {{ __('Report issues to the mixer operator') }}
+          </div>
+        </div>
+        <button class="btn btn-outline-warning btn-block border border-warning"
+                @click="openIssueDialog">
+          <span class="fa fa-exclamation-triangle mr-1"></span>
+          {{ __('Report Issue to Mixer') }}
+        </button>
+      </div>
+
+      <!-- Downstream Alarms -->
+      <div class="downstream-alarms-box w-50 border border-dark rounded p-4" style="min-width: 650px;">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div>
+            <span class="fa fa-bell mr-1"></span>
+            <span class="font-weight-bold">{{ __('Downstream Alarms') }}</span>
+            <span class="badge badge-danger ml-2 alarms-count">{{ alarms.length }}</span>
+          </div>
+          <a href="javascript:void(0)" class="text-muted small" @click="toggleAlarms">
+            <span class="fa fa-chevron-down"></span>
+          </a>
+        </div>
+        <div class="alarms-list pt-4" v-show="showAlarms">
+          <div v-for="(a, idx) in alarms" :key="idx"
+               class="alarm-card mb-2"
+               :style="`background:${a.tone === 'danger' ? '#ffecec' : '#fff9e6'};border-radius:8px;padding:12px 16px;`">
+            <div class="d-flex justify-content-between mb-1">
+              <div class="font-weight-bold">{{ a.station }}</div>
+              <div class="text-muted small">{{ a.time }}</div>
+            </div>
+            <div class="text-uppercase text-muted small mb-1">{{ a.type }}</div>
+            <div class="small">{{ a.description }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Simple modal for Raise Alarm -->
+      <div v-if="issueDialogOpen" class="modal-backdrop fade show"></div>
+      <div v-if="issueDialogOpen" class="modal d-block" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ __('Raise Alarm') }}</h5>
+              <button type="button" class="close" @click="issueDialogOpen = false">
+                <span>&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>{{ __('Issue Type') }}</label>
+                <select class="form-control" v-model="issueType">
+                  <option>Quality Issue</option>
+                  <option>Machine Problem</option>
+                  <option>Material Issue</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>{{ __('Description') }}</label>
+                <textarea class="form-control" rows="3" v-model="issueDescription"></textarea>
+              </div>
+              <div class="form-group">
+                <label>{{ __('Serial Number') }}</label>
+                <input type="text" class="form-control" :value="serial" disabled />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" @click="issueDialogOpen = false">
+                {{ __('Cancel') }}
+              </button>
+              <button class="btn btn-primary" @click="submitIssue">
+                {{ __('Submit') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</template>

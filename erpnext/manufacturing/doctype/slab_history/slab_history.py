@@ -15,10 +15,13 @@ class SlabHistory(Document):
 		from frappe.types import DF
 
 		in_time: DF.Datetime
+		job_card_number: DF.Data | None
 		out_time: DF.Datetime | None
+		oven_params: DF.Link | None
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data
+		preliminary_qc: DF.Link | None
 		station: DF.Data
 		total_time_in_minutes: DF.Float
 	# end: auto-generated types

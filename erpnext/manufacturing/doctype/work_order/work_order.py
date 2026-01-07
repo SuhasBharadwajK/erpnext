@@ -4,6 +4,7 @@
 import json
 
 import frappe
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from frappe import _
 from frappe.model.document import Document
@@ -106,7 +107,7 @@ class WorkOrder(Document):
 		produced_qty: DF.Float
 		product_bundle_item: DF.Link | None
 		production_item: DF.Link
-		production_line: DF.Data | None
+		production_line: DF.Link | None
 		production_plan: DF.Link | None
 		production_plan_item: DF.Data | None
 		production_plan_sub_assembly_item: DF.Data | None
@@ -132,6 +133,87 @@ class WorkOrder(Document):
 		self.set_onload("material_consumption", ms.material_consumption)
 		self.set_onload("backflush_raw_materials_based_on", ms.backflush_raw_materials_based_on)
 		self.set_onload("overproduction_percentage", ms.overproduction_percentage_for_work_order)
+
+	def before_naming(self):
+		if self.production_line:
+			year = frappe.utils.today()[:4]
+			self.naming_series = f"MFG-WO-{self.production_line}-{year}-.#####"
+		else:
+			self.naming_series = "MFG-WO-2025-.#####"
+			
+	def before_insert(self):
+		processes = {
+			"mixing": {
+				"source_warehouse": "Stores",  # TODO: update to silos later
+				"wip_warehouse": "Mixing Warehouse",
+				"fg_warehouse": "Mixing Warehouse"
+			},
+			"distribution": {
+				"source_warehouse": "Mixing Warehouse", 
+				"wip_warehouse": "Distribution Warehouse",
+				"fg_warehouse": "Pressing Warehouse"
+			},
+			"pressed slab": {
+				"source_warehouse": "Pressing Warehouse",
+				"wip_warehouse": "Pressing Warehouse",
+				"fg_warehouse": "Heating Warehouse"
+			},
+			"heated slab": {
+				"source_warehouse": "Heating Warehouse",
+				"wip_warehouse": "Heating Warehouse",
+				"fg_warehouse": "Cooling Warehouse"
+			},
+			"cooled slab": {
+				"source_warehouse": "Cooling Warehouse",
+				"wip_warehouse": "Cooling Warehouse",
+				"fg_warehouse": "Trimming Warehouse"
+			},
+			"trimmed slab": {
+				"source_warehouse": "Trimming Warehouse",
+				"wip_warehouse": "Trimming Warehouse",
+				"fg_warehouse": "Calibration Warehouse"
+			},
+			"calibrated slab": {
+				"source_warehouse": "Calibration Warehouse",
+				"wip_warehouse": "Calibration Warehouse",
+				"fg_warehouse": "Polishing Warehouse"
+			},
+			"polished slab": {
+				"source_warehouse": "Polishing Warehouse",
+				"wip_warehouse": "Polishing Warehouse",
+				"fg_warehouse": "Quality Check Warehouse"
+			},
+			"inspected slab": {
+				"source_warehouse": "Quality Check Warehouse",
+				"wip_warehouse": "Quality Check Warehouse",
+				"fg_warehouse": "Finished Goods"
+			},
+			"fg": {
+				"source_warehouse": "Finished Goods",
+				"wip_warehouse": "Finished Goods",
+				"fg_warehouse": "Finished Goods"
+			}
+			# TODO: Update the finished good warehouses
+
+		}
+		company_abbr = frappe.get_cached_value("Company", self.company, "abbr")
+		def wh(name):
+			return f"{name} - {company_abbr}"
+
+		item_name = (self.production_item or "").lower()
+		for process, wh_map in processes.items():
+			if process in item_name:
+				self.source_warehouse = wh(wh_map["source_warehouse"])
+				self.wip_warehouse = wh(wh_map["wip_warehouse"])
+				self.fg_warehouse = wh(wh_map["fg_warehouse"])   
+				break
+	
+	def after_insert(self):
+		"""Auto-submit Work Order after warehouses are set"""
+		self.load_from_db() 
+		if self.docstatus == 0: 
+			self.submit() 
+			self.update_status()
 
 	def validate(self):
 		self.validate_production_item()
@@ -481,10 +563,14 @@ class WorkOrder(Document):
 		self.create_serial_no_batch_no()
 
 	def on_submit(self):
-		if not self.wip_warehouse and not self.skip_transfer:
-			frappe.throw(_("Work-in-Progress Warehouse is required before Submit"))
-		if not self.fg_warehouse:
-			frappe.throw(_("For Warehouse is required before Submit"))
+		item_lower = (self.production_item or "").lower()
+		if any(x in item_lower for x in ["warehouse", "slab", "mixing", "fg"]):
+			pass
+		else:
+			if not self.wip_warehouse and not self.skip_transfer:
+				frappe.throw(_("Work-in-Progress Warehouse is required before Submit"))
+			if not self.fg_warehouse:
+				frappe.throw(_("For Warehouse is required before Submit"))
 
 		if self.production_plan and frappe.db.exists(
 			"Production Plan Item Reference", {"parent": self.production_plan}
@@ -645,6 +731,9 @@ class WorkOrder(Document):
 		frappe.db.bulk_insert("Serial No", fields=fields, values=set(serial_nos_details))
 
 	def create_job_card(self):
+		if frappe.db.exists("Job Card", {"work_order": self.name, "docstatus": ["!=", 2]}):
+			return
+
 		manufacturing_settings_doc = frappe.get_doc("Manufacturing Settings")
 
 		enable_capacity_planning = not cint(manufacturing_settings_doc.disable_capacity_planning)
@@ -665,7 +754,7 @@ class WorkOrder(Document):
 		self.set_operation_start_end_time(row, idx)
 
 		job_card_doc = create_job_card(
-			self, row, auto_create=True, enable_capacity_planning=enable_capacity_planning
+			self, row, auto_create=True, enable_capacity_planning=enable_capacity_planning, production_line=self.production_line
 		)
 
 		if enable_capacity_planning and job_card_doc:
@@ -1657,11 +1746,12 @@ def validate_operation_data(row):
 		)
 
 
-def create_job_card(work_order, row, enable_capacity_planning=False, auto_create=False):
+def create_job_card(work_order, row, auto_create=False, enable_capacity_planning=False, production_line=None):
 	doc = frappe.new_doc("Job Card")
 	doc.update(
 		{
 			"work_order": work_order.name,
+			"production_line": production_line,
 			"workstation_type": row.get("workstation_type"),
 			"operation": row.get("operation"),
 			"workstation": row.get("workstation"),

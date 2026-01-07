@@ -14,7 +14,9 @@
   "configuration_section",
   "slab_top_temp",
   "column_break_trid",
-  "slab_bottom_temp"
+  "slab_bottom_temp",
+  "racks_section",
+  "racks"
  ],
  "fields": [
   {
@@ -48,7 +50,7 @@
   {
    "fieldname": "configuration_section",
    "fieldtype": "Section Break",
-   "label": "Configuration"
+   "label": "Temperatures"
   },
   {
    "fieldname": "column_break_nly3",
@@ -67,12 +69,23 @@
    "fieldname": "slab_bottom_temp",
    "fieldtype": "Float",
    "label": "Slab Bottom Temperature (in \u00b0C)"
+  },
+  {
+   "fieldname": "racks_section",
+   "fieldtype": "Section Break",
+   "label": "Rack Status"
+  },
+  {
+   "fieldname": "racks",
+   "fieldtype": "Table",
+   "options": "Oven Rack",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-12-18 23:22:07.226295",
+ "modified": "2026-01-07 16:19:57.345816",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Oven",
@@ -88,6 +101,16 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Employee",
    "share": 1,
    "write": 1
   }

@@ -6,7 +6,15 @@
  "engine": "InnoDB",
  "field_order": [
   "section_break_1ofs",
-  "max_pay_line_amount"
+  "max_pay_line_amount",
+  "manufacturing_settings_section",
+  "oven_section",
+  "max_heating_minutes",
+  "quarantine_section",
+  "min_quarantine_hours",
+  "quarantine_labels",
+  "quality_section",
+  "grades"
  ],
  "fields": [
   {
@@ -21,13 +29,58 @@
    "in_list_view": 1,
    "label": "Maximum Payment Line Item Amount",
    "reqd": 1
+  },
+  {
+   "fieldname": "manufacturing_settings_section",
+   "fieldtype": "Tab Break",
+   "label": "Manufacturing Settings"
+  },
+  {
+   "fieldname": "quarantine_labels",
+   "fieldtype": "Table",
+   "label": "Quarantine Labels",
+   "options": "Quarantine Label"
+  },
+  {
+   "fieldname": "quarantine_section",
+   "fieldtype": "Section Break",
+   "label": "Quarantine"
+  },
+  {
+   "default": "0",
+   "fieldname": "min_quarantine_hours",
+   "fieldtype": "Float",
+   "label": "Minimum Quarantine Time (in hours)"
+  },
+  {
+   "fieldname": "oven_section",
+   "fieldtype": "Section Break",
+   "label": "Oven"
+  },
+  {
+   "default": "0",
+   "fieldname": "max_heating_minutes",
+   "fieldtype": "Float",
+   "label": "Maximum Heating Time (in minutes)"
+  },
+  {
+   "fieldname": "quality_section",
+   "fieldtype": "Section Break",
+   "label": "Quality"
+  },
+  {
+   "fieldname": "grades",
+   "fieldtype": "Table",
+   "label": "Allowed Grades",
+   "options": "Slab Quality Grade",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-12-26 21:00:11.164406",
+ "modified": "2026-01-07 13:55:06.828177",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Mahi Granites Settings",
