@@ -79,8 +79,9 @@ def move_slab_to(
 
 	slab = frappe.get_doc("Slab", slab_number)
 
-	current_stage_index = allowed_stages_lower.index(slab.status.lower())
-	next_stage_index = allowed_stages_lower.index(next_stage.lower())
+    current_stage_index = allowed_stages_lower.index(slab.status.lower())
+    next_stage_index = allowed_stages_lower.index(next_stage.lower())
+    next_stage = ALLOWED_STAGES[next_stage_index]
 
 	# Validation: Check the direction of transition
 	if next_stage_index < current_stage_index or (
@@ -127,22 +128,23 @@ def get_slabs_in(line: str, current_stage: str) -> list[dict]:
 
 @frappe.whitelist(allow_guest=True)
 def get_slabs_for(line: str, next_stage: str) -> list[dict]:
-	# Determine valid previous stages based on the next_stage and rules
-	valid_previous_stages = []
-
-	# Check if next_stage is valid
-	if next_stage in ALLOWED_STAGES:
-		target_index = ALLOWED_STAGES.index(next_stage)
-
-		# Special handling for Heating (Pressing -> Heating, Re-pressing -> Heating)
-		if next_stage == "Heating":
-			valid_previous_stages = ["Pressing", "Re-pressing"]
-		# Special handling for Re-pressing (Pressing does NOT lead to Re-pressing here)
-		elif next_stage == "Re-pressing":
-			valid_previous_stages = []
-		# General case: previous index in ALLOWED_STAGES
-		elif target_index > 0:
-			valid_previous_stages = [ALLOWED_STAGES[target_index - 1]]
+    # Determine valid previous stages based on the next_stage and rules
+    valid_previous_stages = []
+    
+    # Check if next_stage is valid
+    next_stage = next_stage.title()
+    if next_stage in ALLOWED_STAGES:
+        target_index = ALLOWED_STAGES.index(next_stage)
+        
+        # Special handling for Heating (Pressing -> Heating, Re-pressing -> Heating)
+        if next_stage == "Heating":
+            valid_previous_stages = ["Pressing", "Re-pressing"]
+        # Special handling for Re-pressing (Pressing does NOT lead to Re-pressing here)
+        elif next_stage == "Re-pressing":
+             valid_previous_stages = []
+        # General case: previous index in ALLOWED_STAGES
+        elif target_index > 0:
+            valid_previous_stages = [ALLOWED_STAGES[target_index - 1]]
 
 	if not valid_previous_stages:
 		return []
@@ -303,3 +305,66 @@ def get_slab_from_previous_stage(job_card_name):
 	)
 	# TODO - Update the nextstage title
 	return slabs[0] if slabs else None
+
+
+@frappe.whitelist()
+def find_next_job_card(current_job_card):
+    current_jc = frappe.get_doc("Job Card", current_job_card)
+    current_wo = frappe.get_doc("Work Order", current_jc.work_order)
+
+    process_mapping = {
+        "mixing": "distribution",
+        "distribution": "pressed slab",
+        "pressed slab": "heated slab",
+        "heated slab": "cooled slab",
+        "cooled slab": "trimmed slab",
+        "trimmed slab": "calibrated slab",
+        "calibrated slab": "polished slab",
+        "polished slab": "inspected slab",
+    }
+
+    if " - " not in current_wo.production_item:
+        frappe.throw("Unable to determine current process from Work Order")
+
+    current_process = current_wo.production_item.split(" - ")[-1].strip().lower()
+    next_process = process_mapping.get(current_process)
+
+    if not next_process:
+        frappe.throw(f"No next process found after {current_process}")
+
+    # Find next Work Order in same Production Plan
+    next_wo = frappe.db.get_value(
+        "Work Order",
+        {
+            "production_plan": current_wo.production_plan,
+            "production_item": ["like", f"%{next_process}%"],
+            "docstatus": ["<", 2],
+        },
+        "name",
+    )
+
+    if not next_wo:
+        frappe.throw(f"Next Work Order for '{next_process}' not found")
+
+    # Find first open Job Card for next Work Order
+    next_job_card = frappe.db.get_value(
+        "Job Card",
+        {
+            "work_order": next_wo,
+            "status": "Open",
+            "docstatus": 0,
+        },
+        "name",
+        order_by="creation asc",
+    )
+
+    if not next_job_card:
+        frappe.throw("No open Job Card available for next process")
+
+    return {
+        "current_job_card": current_jc.name,
+        "current_process": current_process,
+        "next_process": next_process,
+        "next_work_order": next_wo,
+        "next_job_card": next_job_card,
+    }
