@@ -1,6 +1,13 @@
 <script setup>
 import { ref, reactive, nextTick, computed, onMounted, onUnmounted } from 'vue';
 
+const updateKey = ref(0);
+const jobCardNumber = ref(null);
+const loadingSlab = ref(false);
+const currentSlab = ref([]);
+
+const ovenData = ref(null);
+
 const work_context = reactive({
     assigned_line: "",
     assigned_station: "Oven 1",
@@ -287,9 +294,7 @@ async function confirmUnload() {
             const data = res.message;
             refreshOvenData();
             frappe.msgprint(__('Slab unloaded successfully'));
-            debugger;
             if (data.finish_results && data.finish_results.work_order) {
-                debugger;
                 await transfer_to_next_process(data.finish_results.work_order, data.finish_results.job_card_qty);
             }
         }
@@ -306,7 +311,7 @@ async function confirmLoad() {
     if (!targetRack.value || !ovenData.value) {
         return;
     }
-    debugger;
+
     prepareOvenOperation();
 
     const res = await frappe.call({

@@ -202,8 +202,8 @@ async function fetchQueue(line, station) {
               line: line,
               next_stage: station
           }
-        });
-        debugger;
+		});
+
       if (result.message) {
         slabsQueue.value = result.message || [];
       }
@@ -255,7 +255,6 @@ async function slabInfo(jc, station) {
   });
   let slab = jcSlabRes.message;
     
-  debugger;
   // If no slab found for this specific Job Card, check if there's one coming from the previous stage
   if (!slab && station.toLowerCase() === 'distribution') {
     await createSlab(jc.production_line);
@@ -323,12 +322,11 @@ async function finishOperation() {
   const route = frappe.get_route();
   const station = route[1] || props.process;
   jobCardName.value = route[2] || props.job_card;
-  debugger;
   if (processTimerHandle.value) {
       clearInterval(processTimerHandle.value);
       processTimerHandle.value = null;
   }
-  debugger;
+
   try {
     const result = await frappe.call({
         method: 'erpnext.manufacturing.page.operator_station.operator_station.finish_distribution',
