@@ -2,9 +2,9 @@
 # License: GNU General Public License v3. See license.txt
 
 import json
+from datetime import datetime
 
 import frappe
-from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from frappe import _
 from frappe.model.document import Document
@@ -71,9 +71,10 @@ class WorkOrder(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from frappe.types import DF
+
 		from erpnext.manufacturing.doctype.work_order_item.work_order_item import WorkOrderItem
 		from erpnext.manufacturing.doctype.work_order_operation.work_order_operation import WorkOrderOperation
-		from frappe.types import DF
 
 		actual_end_date: DF.Datetime | None
 		actual_operating_cost: DF.Currency
@@ -119,7 +120,17 @@ class WorkOrder(Document):
 		scrap_warehouse: DF.Link | None
 		skip_transfer: DF.Check
 		source_warehouse: DF.Link | None
-		status: DF.Literal["", "Draft", "Submitted", "Not Started", "In Process", "Completed", "Stopped", "Closed", "Cancelled"]
+		status: DF.Literal[
+			"",
+			"Draft",
+			"Submitted",
+			"Not Started",
+			"In Process",
+			"Completed",
+			"Stopped",
+			"Closed",
+			"Cancelled",
+		]
 		stock_uom: DF.Link | None
 		total_operating_cost: DF.Currency
 		transfer_material_against: DF.Literal["", "Work Order", "Job Card"]
@@ -140,63 +151,64 @@ class WorkOrder(Document):
 			self.naming_series = f"MFG-WO-{self.production_line}-{year}-.#####"
 		else:
 			self.naming_series = "MFG-WO-2025-.#####"
-			
+
 	def before_insert(self):
 		processes = {
+			# TODO: Get these settings dynamically.
 			"mixing": {
-				"source_warehouse": "Stores",  # TODO: update to silos later
+				"source_warehouse": "SILOS Warehouse",
 				"wip_warehouse": "Mixing Warehouse",
-				"fg_warehouse": "Mixing Warehouse"
+				"fg_warehouse": "Mixing Warehouse",
 			},
 			"distribution": {
-				"source_warehouse": "Mixing Warehouse", 
+				"source_warehouse": "Mixing Warehouse",
 				"wip_warehouse": "Distribution Warehouse",
-				"fg_warehouse": "Pressing Warehouse"
+				"fg_warehouse": "Pressing Warehouse",
 			},
 			"pressed slab": {
 				"source_warehouse": "Pressing Warehouse",
 				"wip_warehouse": "Pressing Warehouse",
-				"fg_warehouse": "Heating Warehouse"
+				"fg_warehouse": "Heating Warehouse",
 			},
 			"heated slab": {
 				"source_warehouse": "Heating Warehouse",
 				"wip_warehouse": "Heating Warehouse",
-				"fg_warehouse": "Cooling Warehouse"
+				"fg_warehouse": "Cooling Warehouse",
 			},
 			"cooled slab": {
 				"source_warehouse": "Cooling Warehouse",
 				"wip_warehouse": "Cooling Warehouse",
-				"fg_warehouse": "Trimming Warehouse"
+				"fg_warehouse": "Trimming Warehouse",
 			},
 			"trimmed slab": {
 				"source_warehouse": "Trimming Warehouse",
 				"wip_warehouse": "Trimming Warehouse",
-				"fg_warehouse": "Calibration Warehouse"
+				"fg_warehouse": "Calibration Warehouse",
 			},
 			"calibrated slab": {
 				"source_warehouse": "Calibration Warehouse",
 				"wip_warehouse": "Calibration Warehouse",
-				"fg_warehouse": "Polishing Warehouse"
+				"fg_warehouse": "Polishing Warehouse",
 			},
 			"polished slab": {
 				"source_warehouse": "Polishing Warehouse",
 				"wip_warehouse": "Polishing Warehouse",
-				"fg_warehouse": "Quality Check Warehouse"
+				"fg_warehouse": "Quality Check Warehouse",
 			},
 			"inspected slab": {
 				"source_warehouse": "Quality Check Warehouse",
 				"wip_warehouse": "Quality Check Warehouse",
-				"fg_warehouse": "Finished Goods"
+				"fg_warehouse": "Finished Goods",
 			},
 			"fg": {
 				"source_warehouse": "Finished Goods",
 				"wip_warehouse": "Finished Goods",
-				"fg_warehouse": "Finished Goods"
-			}
+				"fg_warehouse": "Finished Goods",
+			},
 			# TODO: Update the finished good warehouses
-
 		}
 		company_abbr = frappe.get_cached_value("Company", self.company, "abbr")
+
 		def wh(name):
 			return f"{name} - {company_abbr}"
 
@@ -205,14 +217,14 @@ class WorkOrder(Document):
 			if process in item_name:
 				self.source_warehouse = wh(wh_map["source_warehouse"])
 				self.wip_warehouse = wh(wh_map["wip_warehouse"])
-				self.fg_warehouse = wh(wh_map["fg_warehouse"])   
+				self.fg_warehouse = wh(wh_map["fg_warehouse"])
 				break
-	
+
 	def after_insert(self):
 		"""Auto-submit Work Order after warehouses are set"""
-		self.load_from_db() 
-		if self.docstatus == 0: 
-			self.submit() 
+		self.load_from_db()
+		if self.docstatus == 0:
+			self.submit()
 			self.update_status()
 
 	def validate(self):
@@ -754,7 +766,11 @@ class WorkOrder(Document):
 		self.set_operation_start_end_time(row, idx)
 
 		job_card_doc = create_job_card(
-			self, row, auto_create=True, enable_capacity_planning=enable_capacity_planning, production_line=self.production_line
+			self,
+			row,
+			auto_create=True,
+			enable_capacity_planning=enable_capacity_planning,
+			production_line=self.production_line,
 		)
 
 		if enable_capacity_planning and job_card_doc:
@@ -1377,7 +1393,7 @@ class WorkOrder(Document):
 @frappe.validate_and_sanitize_search_inputs
 def get_bom_operations(doctype, txt, searchfield, start, page_len, filters):
 	if txt:
-		filters["operation"] = ("like", "%%%s%%" % txt)
+		filters["operation"] = ("like", f"%{txt}%")
 
 	return frappe.get_all("BOM Operation", filters=filters, fields=["operation"], as_list=1)
 

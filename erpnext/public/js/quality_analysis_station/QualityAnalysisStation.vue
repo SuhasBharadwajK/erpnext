@@ -9,12 +9,13 @@ const work_context = reactive({
 });
 
 const fetchWorkContext = async () => {
-    const settings = await frappe.db.get_single('Demo Settings');
+    const settings = await frappe.db.get_doc('Demo Settings');
     if (settings) {
         work_context.assigned_line = settings.default_line;
         work_context.assigned_shift = settings.default_shift;
     }
 };
+
 const currentTime = ref('');
 const currentDate = ref('');
 const updateKey = ref(0);
