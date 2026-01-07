@@ -1,12 +1,17 @@
 <script setup>
-import { ref, nextTick, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, nextTick, computed, onMounted, onUnmounted } from 'vue';
 
-// TODO: Make this dynamic based on the user's role.
-const get_work_context = () => {
-    return {
-        "assigned_line": "3",
-        "assigned_station": "Oven 1",
-        "assigned_shift": "A"
+const work_context = reactive({
+    assigned_line: "",
+    assigned_station: "Oven 1",
+    assigned_shift: ""
+});
+
+const fetchWorkContext = async () => {
+    const settings = await frappe.db.get_doc('Demo Settings');
+    if (settings) {
+        work_context.assigned_line = settings.default_line;
+        work_context.assigned_shift = settings.default_shift;
     }
 };
 
@@ -67,10 +72,13 @@ const incomingSlabs = ref([]);
 const currentTime = ref(new Date());
 let timerInterval = null;
 
-onMounted(() => {
+onMounted(async () => {
     timerInterval = setInterval(() => {
         currentTime.value = new Date();
     }, 1000);
+    await fetchWorkContext();
+    refreshOvenData();
+    get_slabs_ready_for_heating();
 });
 
 onUnmounted(() => {
@@ -135,10 +143,6 @@ const racks = computed(() => {
 const oven = computed(() => {
     return ovenData.value;
 });
-
-const work_context = get_work_context();
-// Initial load
-refreshOvenData();
 
 
 const selectedSlab = ref(null);
@@ -333,8 +337,6 @@ function prepareOvenOperation() {
         remarks: ''
     };
 }
-
-get_slabs_ready_for_heating();
 
 frappe.realtime.on('slab_checkout', (slab) => {
     get_slabs_ready_for_heating();
