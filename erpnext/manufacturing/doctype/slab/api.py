@@ -9,7 +9,7 @@ from erpnext.manufacturing.doctype.slab_history.slab_history import SlabHistory
 
 
 @frappe.whitelist()
-def create_slab(line: str, type: str, job_card_number: str | None = None):
+def create_slab(line: str, type: str, job_card_number: str | None = None, start_time: datetime | None = None):
 	new_slab: Slab = frappe.new_doc("Slab")  # pyright: ignore[reportAssignmentType]
 	new_slab.line = line
 	new_slab.template = type
@@ -28,7 +28,7 @@ def create_slab(line: str, type: str, job_card_number: str | None = None):
 	slab_history: SlabHistory = frappe.new_doc("Slab History")  # pyright: ignore[reportAssignmentType]
 	slab_history.idx = 1
 	slab_history.station = current_stage
-	slab_history.in_time = datetime.now()
+	slab_history.in_time = start_time or datetime.now()
 	slab_history.job_card_number = job_card_number
 	new_slab.slab_history.append(slab_history)
 
@@ -99,7 +99,6 @@ def move_slab_to(
 		checkout_slab(slab_number)
 		slab: Slab = frappe.get_doc("Slab", slab_number)
 
-	slab.status = next_stage  # pyright: ignore[reportAttributeAccessIssue]
 	slab.is_cur_stage_complete = False
 	slab.status = ALLOWED_STAGES[next_stage_index]  # pyright: ignore[reportAttributeAccessIssue]
 	slab.current_job_card = job_card_number
@@ -162,6 +161,7 @@ def get_slabs_for(line: str, next_stage: str) -> list[dict]:
 			"batch_number",
 			"is_cur_stage_complete",
 			"template",
+			"current_job_card",
 			"creation",
 			"modified",
 		],
@@ -237,6 +237,7 @@ def get_slab_for_job_card(job_card):
 		["name", "serial_number", "batch_number", "template", "line", "current_stage"],
 		as_dict=1,
 	)
+
 	return slab
 
 
@@ -262,7 +263,7 @@ def get_slab_from_previous_stage(job_card_name):
 	)
 	previous_process = reverse_process_mapping.get(current_process)
 
-	if not previous_process:
+	if not previous_process and current_process != "distribution":
 		frappe.msgprint(f"No previous process found before '{current_process}'")
 		return None
 	previous_wo = frappe.db.get_value(
@@ -308,8 +309,9 @@ def get_slab_from_previous_stage(job_card_name):
 
 
 @frappe.whitelist()
-def find_next_job_card(current_job_card):
-    current_jc = frappe.get_doc("Job Card", current_job_card)
+def find_next_job_card_for_slab(slab_name):
+    slab = frappe.get_doc("Slab", slab_name)
+    current_jc = frappe.get_doc("Job Card", slab.current_job_card)
     current_wo = frappe.get_doc("Work Order", current_jc.work_order)
 
     process_mapping = {

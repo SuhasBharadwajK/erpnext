@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 
 const jobCard = ref(null);
 const batchNo = ref('');
-const colour = ref('Carrara White');
+const colour = ref('');
 const phase = ref('Preparation Phase');
 const ingredients = ref([]);
 const loadingIngredients = ref(true);
@@ -18,6 +18,27 @@ const nextWorkOrder = ref('');
 const bomQty = ref(0);
 const selectedMixer = ref('');
 const mixersList = ref([]);
+const jobcardsQueue = ref([]);
+const selectedItemName = ref(null);
+
+function formatDateTime(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    const strHours = String(hours).padStart(2, '0');
+    
+    return `${strHours}:${minutes} ${ampm} | ${day} ${month} ${year}`;
+}
 
 // downstream alerts (dummy)
 const alerts = ref([
@@ -70,72 +91,108 @@ const isMixerSelected = computed(() => !!selectedMixer.value);
 // actions
 onMounted(async () => {
     const route = frappe.get_route();
-    jobCard.value = route[2] || null;
+    const jcName = route[2] || null;
 
-    if (!jobCard.value) {
-        error.value = __('No Job Card found in route');
+    await fetchQueue();
+
+    if (jcName) {
+        await selectJobCard(jcName);
+    } else if (jobcardsQueue.value.length > 0) {
+        await selectJobCard(jobcardsQueue.value[0].name);
+    } else {
         loadingIngredients.value = false;
-        return;
     }
-    await loadMixers();
-    const stateRes = await frappe.call({
-        method: 'erpnext.manufacturing.page.mixer_station.mixer_station.get_mixer_state',
-        args: { job_card: jobCard.value },
-    });
+});
 
-    const s = stateRes.message || {};
-    mixingReady.value = !!s.mixer_materials_confirmed;
-    mixingStarted.value = !!s.mixer_started;
-    mixingStartTime.value = s.mixer_start_time;
-
-    jobCardSubmitted.value = !!s.job_card_submitted || false;  
-    if (jobCardSubmitted.value) {
-        preparedQty.value = s.prepared_qty || 0;
-        stockEntryName.value = s.stock_entry_name || '';
+async function fetchQueue() {
+    try {
+        const response = await frappe.call({
+            method: 'erpnext.manufacturing.page.operator_station.operator_station.get_open_job_cards',
+            args: { process: 'mixing' }
+        });
+        jobcardsQueue.value = response.message || [];
+    } catch (e) {
+        console.error('Failed to fetch mixing queue:', e);
     }
+}
 
-    if (mixingStarted.value && mixingStartTime.value) {
-        const start = frappe.datetime.str_to_obj(mixingStartTime.value);
-        const now = frappe.datetime.now_datetime();
-        const diffSeconds = (new Date(now) - new Date(start)) / 1000;
-        mixingElapsed.value = Math.max(0, Math.floor(diffSeconds));
-
-        if (mixingTimerHandle.value) clearInterval(mixingTimerHandle.value);
-        mixingTimerHandle.value = setInterval(() => {
-            mixingElapsed.value += 1;
-        }, 1000);
-    } 
-    else {
-        mixingElapsed.value = 0;
-        if (mixingTimerHandle.value) {
-            clearInterval(mixingTimerHandle.value);
-            mixingTimerHandle.value = null;
-        }
+async function selectJobCard(jcName) {
+    if (selectedItemName.value === jcName) return;
+    
+    // Stop timer and reset state
+    if (mixingTimerHandle.value) {
+        clearInterval(mixingTimerHandle.value);
+        mixingTimerHandle.value = null;
     }
+    
+    selectedItemName.value = jcName;
+    jobCard.value = jcName;
+    resetState();
+    await loadJobCardDetails(jcName);
+}
 
+function resetState() {
+    batchNo.value = '';
+    ingredients.value = [];
+    mixingStarted.value = false;
+    mixingStartTime.value = null;
+    mixingElapsed.value = 0;
+    mixingReady.value = false;
+    jobCardSubmitted.value = false;
+    preparedQty.value = 0;
+    stockEntryName.value = '';
+    transferredQty.value = 0;
+    transferSuccess.value = false;
+    bomQty.value = 0;
+    selectedMixer.value = '';
+    error.value = null;
+}
+async function loadJobCardDetails(jcName) {
     try {
         loadingIngredients.value = true;
-        error.value = null;
+        
+        await loadMixers();
+        const stateRes = await frappe.call({
+            method: 'erpnext.manufacturing.page.mixer_station.mixer_station.get_mixer_state',
+            args: { job_card: jcName },
+        });
 
-        if (jobCard.value) {
-            const jc = await frappe.db.get_doc('Job Card', jobCard.value);
-            if (jc.bom_no) {
-                batchNo.value = jc.bom_no;  
-            }
+        const s = stateRes.message || {};
+        mixingReady.value = !!s.mixer_materials_confirmed;
+        mixingStarted.value = !!s.mixer_started;
+        mixingStartTime.value = s.mixer_start_time;
+
+        jobCardSubmitted.value = !!s.job_card_submitted || false;  
+        if (jobCardSubmitted.value) {
+            preparedQty.value = s.prepared_qty || 0;
+            stockEntryName.value = s.stock_entry_name || '';
+        }
+
+        if (mixingStarted.value && mixingStartTime.value) {
+            const start = frappe.datetime.str_to_obj(mixingStartTime.value);
+            const now = frappe.datetime.now_datetime();
+            const diffSeconds = (new Date(now) - new Date(start)) / 1000;
+            mixingElapsed.value = Math.max(0, Math.floor(diffSeconds));
+
+            if (mixingTimerHandle.value) clearInterval(mixingTimerHandle.value);
+            mixingTimerHandle.value = setInterval(() => {
+                mixingElapsed.value += 1;
+            }, 1000);
+        }
+
+        const jc = await frappe.db.get_doc('Job Card', jcName);
+        if (jc.bom_no) {
+            batchNo.value = jc.bom_no;  
         }
         
         const r = await frappe.call({
             method: 'erpnext.manufacturing.page.mixer_station.mixer_station.get_mixer_ingredients',
-            args: { 
-                job_card: jobCard.value 
-            }
+            args: { job_card: jcName }
         });
         
         ingredients.value = (r.message || []).map(item => {
             const name = item.item_name || '';
             const lower = name.toLowerCase();
-            const is_additional = additionalIngredients.some(s => lower.includes(s));
-
             return {
                 name,
                 standard: `${item.stock_uom_qty} ${item.stock_uom}`,
@@ -147,7 +204,6 @@ onMounted(async () => {
         });
 
         if (jobCardSubmitted.value) {
-            const jc = await frappe.db.get_doc('Job Card', jobCard.value);
             preparedQty.value = jc.total_completed_qty || jc.for_quantity || s.prepared_qty || 0;
             stockEntryName.value = s.stock_entry_name || '';
             transferredQty.value = 0;
@@ -157,12 +213,12 @@ onMounted(async () => {
     } 
     catch (e) {
         error.value = e.message || e;
-        frappe.msgprint(__('Failed to load BOM ingredients: {0}', [error.value]));
+        frappe.msgprint(__('Failed to load Job Card: {0}', [error.value]));
     } 
     finally {
         loadingIngredients.value = false;
     }
-});
+}
 
 async function toggleReady() {
     if (mixingStarted.value) {
@@ -281,6 +337,7 @@ async function finishAndDischarge() {
                 indicator: 'green'
             });
         }
+        await fetchQueue();
     }
     catch (error) {
         console.error('error.message:', error.message);
@@ -487,251 +544,290 @@ async function onMixerChange() {
 </script>
 
 <template>
-    <div class="page-card p-0 d-flex">
-
-        <!-- Left + middle columns wrapper -->
-        <div class="w-100">
-            <!-- Top header -->
-            <div class="d-flex align-items-center mb-4">
-                <div>
-                    <div class="mb-1">
-                        <a href="javascript:history.back()" class="small text-muted">
-                            &larr; {{ __('Back to Queue') }}
-                        </a>
-                    </div>
-                    <h2 class="mb-3">{{ batchNo }}</h2>
-                    <div class="text-danger font-weight-bold">{{ colour }}</div>
+    <div class="page-card p-0 d-flex" style="height: calc(100vh - 120px); overflow: hidden;">
+        <!-- Left: Sidebar Queue -->
+        <div class="queue-sidebar border-right" style="width: 320px; flex-shrink: 0; display: flex; flex-direction: column; background: #f8f9fa;">
+            <div class="p-3 border-bottom bg-white">
+                <h5 class="mb-0 font-weight-bold">{{ __('Pending Job Cards') }}</h5>
+                <div class="text-muted small">{{ __('Mixing Process') }}</div>
+            </div>
+            <div class="flex-grow-1" style="overflow-y: auto;">
+                <div v-if="jobcardsQueue.length === 0" class="p-4 text-center text-muted">
+                    <div class="fa fa-clipboard fa-2x mb-2 opacity-50"></div>
+                    <div>{{ __('No pending jobs') }}</div>
                 </div>
-
-                <div class="ml-4">
-                    <span class="badge badge-pill badge-light border px-3 py-2" style="font-size:1rem">
-                        {{ phase }}
-                    </span>
+                <div v-for="jc in jobcardsQueue" :key="jc.name" 
+                    class="jc-card p-3 border-bottom cursor-pointer transition-all"
+                    :class="{'active-jc shadow-sm': selectedItemName === jc.name}"
+                    @click="selectJobCard(jc.name)">
+                    <div class="justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-1 font-weight-bold" :class="{'text-primary': selectedItemName === jc.name}">{{ jc.name }}</h5>
+                        <span class="text-muted small">{{ formatDateTime(jc.creation) }}</span>
+                    </div>
+                    <div class="font-weight-bold mb-1" :class="{'text-primary': selectedItemName === jc.name}">
+                        {{ jc.bom_no }}
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="text-muted small">{{ jc.for_quantity }} {{ jc.uom }}</div>
+                    </div>
                 </div>
-            </div> <!-- /header -->
+            </div>
+        </div>
 
-            <div class="d-flex">
-                <!-- Left: Raw Material Inputs -->
-                <div class="flex-fill mr-4" style="font-size: medium;">
-                    <div class="mb-3">
-                        <h3 class="mb-1">{{ __('Raw Material Inputs') }}</h3>
-                        <div class="text-muted small">
-                            {{ __('Review and adjust calculated quantities before mixing.') }}
+        <!-- Right: Main Content -->
+        <div class="flex-grow-1 d-flex flex-column" style="overflow-y: auto; background: white;">
+            <div class="p-4 pl-5 w-100">
+                <!-- Top header -->
+                <div class="d-flex align-items-center mb-4">
+                    <div>
+                        <div class="mb-1">
+                            <a href="/app/job-card" class="small text-muted">
+                                &larr; {{ __('Back to List') }}
+                            </a>
                         </div>
+                        <h2 class="mb-1 font-weight-bold">{{ batchNo || __('Select a Job Card') }}</h2>
+                        <div class="text-danger font-weight-bold">{{ colour }}</div>
                     </div>
 
-                    <div class="mb-3 d-flex justify-content-between">
-                        <label class="form-label bold">{{ __('Select Mixer') }}</label>
-                        <select v-model="selectedMixer" style="width: 30%;" class="form-control" :disabled="mixingReady || mixingStarted" @change="onMixerChange">
-                            <option value="" disabled selected>
-                                {{ __('Select Mixer Type...') }}
-                            </option>
-                            <option v-for="mixer in mixersList" :key="mixer.name" :value="mixer.name">
-                                {{ mixer.name}}
-                            </option>
-                        </select>
-                    </div>
-
-                    <div v-if="loadingIngredients" class="text-center py-4">
-                        <div class="spinner-border spinner-border-sm mr-2" role="status"></div>
-                        {{ __('Loading BOM ingredients...') }}
-                    </div>
-
-                    <!-- Error -->
-                    <div v-else-if="error" class="alert alert-danger">
-                        {{ error }}
-                    </div>
-
-                    <div v-else>
-                        <div v-for="(ing, idx) in ingredients" :key="idx" class="mb-3 pb-2 border-bottom">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="font-weight-bold">{{ ing.name }}</div>
-                                    <div class="text-muted small">
-                                        {{ __('Standard: {0}', [ing.standard]) }}
-                                    </div>
-                                </div>
-                                <template v-if="isAdditionalIngredient(ing.name)">
-                                    <div class="d-flex flex-column align-items-end">
-                                        <label class="added-checkbox mb-1">
-                                            <input type="checkbox" v-model="ing.is_added">
-                                            <span
-                                            class="added-text"
-                                            :class="ing.is_added ? 'added' : 'not-added'"
-                                            >
-                                            {{ ing.is_added ? 'Added' : 'Not Added' }}
-                                            </span>
-                                        </label>
-                                        <div v-if="ing.is_added" class="d-flex align-items-center">
-                                            <input
-                                            type="number"
-                                            class="form-control text-right"
-                                            :readonly="inputsReadonly"
-                                            :class="inputsReadonly ? 'bg-light' : ''"
-                                            style="width:120px;"
-                                            v-model.number="ing.qty"
-                                            />
-                                            <span class="ml-2 text-muted">{{ ing.unit }}</span>
-                                        </div>
-                                    </div>
-                                </template>
-                                <template v-else>
-                                    <div class="d-flex align-items-center">
-                                        <input type="number"
-                                            class="form-control text-right"
-                                            :readonly="inputsReadonly"
-                                            :class="inputsReadonly ? 'bg-light' : ''"
-                                            style="width:120px;"
-                                            v-model.number="ing.qty" />
-                                        <span class="ml-2 text-muted">{{ ing.unit }}</span>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-
-                    </div>
-                </div> <!-- /left column -->
-
-                <!-- Middle: Mixing card -->
-                <div style="width:315px;" class="mr-4 p-4">
-                    <!-- Ready to Mix state -->
-                    <div v-if="!mixingStarted && !jobCardSubmitted" class="border rounded p-4 mb-3 text-center">
-                        <div class="mb-2 text-success font-weight-bold">
-                            {{ __('Ready to Mix?') }}
-                        </div>
-                        <div class="text-muted small mb-3">
-                            {{ __('Confirm all materials are loaded and weighed correctly.') }}
-                        </div>
-
-                        <div class="mb-3">
-                            <button v-if="!mixingReady" :disabled="!isMixerSelected || !allAdditionalIngredientsAdded" :class="!isMixerSelected || !allAdditionalIngredientsAdded ? 'btn-disabled-pointer' : ''" class="btn btn-sm border border-success" @click="toggleReady">
-                                <span class="fa fa-check mr-1"></span>
-                                {{ __('Confirm Materials') }}
-                            </button>
-
-                            <button v-else class="btn btn-success btn-block py-2" :disabled="mixingStarted" @click="startMixing">
-                                <span class="fa fa-play mr-1"></span>
-                                {{ __('Start Mixing') }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Mixing in Progress state -->
-                    <div v-else-if="mixingStarted && !jobCardSubmitted" class="border rounded p-4 mb-3 text-center" style="background:#e8f8ec;">
-                        <div
-                            class="mb-2 text-success font-weight-bold d-flex justify-content-center align-items-center">
-                            <span class="fa fa-spinner fa-spin mr-2"></span>
-                            {{ __('Mixing in Progress') }}
-                        </div>
-                        <div class="display-4 font-weight-bold mb-3" style="font-size:2.5rem;">
-                            {{ formattedMixingTime }}
-                        </div>
-                        <div class="d-flex flex-column gap-2 justify-content-center mb-3">
-                            <button class="btn btn-success flex-fill" @click="finishAndDischarge">
-                                <span class="fa fa-check mr-1"></span>
-                                {{ __('Finish & Discharge') }}
-                            </button>
-                            <button class="btn btn-outline-primary flex-fill mt-2 border border-dark" @click="openAddMaterials">
-                                <span class="fa fa-plus mr-1"></span>
-                                {{ __('Add Materials') }}
-                            </button>
-                        </div>
-                        
-                        <div class="text-muted small mt-2">
-                            {{ __('Started at {0}', [startedAtLabel]) }}
-                        </div>
-                    </div>
-
-                    <div v-else-if="jobCardSubmitted" class="border rounded p-4 mb-3 text-center" style="background:#fff3cd;">
-                        <div class="mb-3 text-warning font-weight-bold d-flex justify-content-center align-items-center">
-                            <span class="fa fa-cube mr-2"></span>
-                            {{ transferSuccess ? 'Transfer Completed!' : 'Ready for Transfer' }}
-                        </div>
-                        <div class="display-4 font-weight-bold mb-4" style="font-size:2.8rem; color:#856404;">
-                            {{ getDisplayQty().toLocaleString() }}
-                        </div>
-                        <div class="d-flex flex-column gap-2 justify-content-center mb-3">
-                            <button 
-                                v-if="!transferSuccess.value" 
-                                :disabled="!getCanTransfer()"
-                                :class="['btn btn-lg flex-fill', getCanTransfer() ? 'btn-warning' : 'btn-secondary']"
-                                @click="transferToFGWarehouse">
-                                <span class="fa fa-truck mr-2"></span>
-                                {{ getCanTransfer() ? 'Transfer ' + bomQty.toLocaleString() : 'Insufficient Qty' }}
-                            </button>
-                            <div v-else class="alert alert-success">
-                                <span class="fa fa-check-circle mr-2"></span>
-                                All transferred to {{ nextWorkOrder }}!
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Safety Override -->
-                    <div class="border rounded p-3 bg-warning-light">
-                        <div class="d-flex">
-                            <span class="fa fa-exclamation-triangle text-warning mr-2"></span>
-                            <div>
-                                <div class="font-weight-bold text-warning">
-                                    {{ __('Safety Override') }}
-                                </div>
-                                <div class="text-muted small">
-                                    {{ __('Only you can override ingredient quantities. All changes are logged for quality assurance.') }}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div> <!-- /middle column -->
-            </div> <!-- /d-flex for left+middle -->
-        </div> <!-- /w-100 wrapper -->
-
-        <!-- Right: Downstream Alerts -->
-        <div style="width:400px;">
-            <div class="mb-2 d-flex align-items-center">
-                <div>
-                    <div class="d-flex align-items-center">
-                        <span class="fa fa-exclamation-circle text-danger mr-2"></span>
-                        <div class="text-danger font-weight-bold">
-                            {{ __('Downstream Alerts') }}
-                        </div>
+                    <div class="ml-4">
+                        <span class="badge badge-pill badge-light border px-3 py-2" style="font-size:1rem">
+                            {{ phase }}
+                        </span>
                     </div>
                     
-                    <div class="text-muted small">
-                        {{ __('Real-time alerts from Presser, Cooler & Polishing stations.') }}
+                    <div class="ml-auto text-muted small" v-if="jobCard">
+                        {{ __('Job Card: {0}', [jobCard]) }}
+                    </div>
+                </div> <!-- /header -->
+
+                <div class="d-flex" v-if="jobCard">
+                    <!-- Left: Raw Material Inputs -->
+                    <div class="flex-fill mr-4" style="font-size: medium;">
+                        <div class="mb-3">
+                            <h3 class="mb-1">{{ __('Raw Material Inputs') }}</h3>
+                            <div class="text-muted small">
+                                {{ __('Review and adjust calculated quantities before mixing.') }}
+                            </div>
+                        </div>
+
+                        <div class="mb-3 d-flex justify-content-between">
+                            <label class="form-label bold">{{ __('Select Mixer') }}</label>
+                            <select v-model="selectedMixer" style="width: 30%;" class="form-control" :disabled="mixingReady || mixingStarted" @change="onMixerChange">
+                                <option value="" disabled selected>
+                                    {{ __('Select Mixer Type...') }}
+                                </option>
+                                <option v-for="mixer in mixersList" :key="mixer.name" :value="mixer.name">
+                                    {{ mixer.name}}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div v-if="loadingIngredients" class="text-center py-4">
+                            <div class="spinner-border spinner-border-sm mr-2" role="status"></div>
+                            {{ __('Loading BOM ingredients...') }}
+                        </div>
+
+                        <!-- Error -->
+                        <div v-else-if="error" class="alert alert-danger">
+                            {{ error }}
+                        </div>
+
+                        <div v-else>
+                            <div v-for="(ing, idx) in ingredients" :key="idx" class="mb-3 pb-2 border-bottom">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="font-weight-bold">{{ ing.name }}</div>
+                                        <div class="text-muted small">
+                                            {{ __('Standard: {0}', [ing.standard]) }}
+                                        </div>
+                                    </div>
+                                    <template v-if="isAdditionalIngredient(ing.name)">
+                                        <div class="d-flex flex-column align-items-end">
+                                            <label class="added-checkbox mb-1">
+                                                <input type="checkbox" v-model="ing.is_added">
+                                                <span
+                                                class="added-text"
+                                                :class="ing.is_added ? 'added' : 'not-added'"
+                                                >
+                                                {{ ing.is_added ? 'Added' : 'Not Added' }}
+                                                </span>
+                                            </label>
+                                            <div v-if="ing.is_added" class="d-flex align-items-center">
+                                                <input
+                                                type="number"
+                                                class="form-control text-right"
+                                                :readonly="inputsReadonly"
+                                                :class="inputsReadonly ? 'bg-light' : ''"
+                                                style="width:120px;"
+                                                v-model.number="ing.qty"
+                                                />
+                                                <span class="ml-2 text-muted">{{ ing.unit }}</span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template v-else>
+                                        <div class="d-flex align-items-center">
+                                            <input type="number"
+                                                class="form-control text-right"
+                                                :readonly="inputsReadonly"
+                                                :class="inputsReadonly ? 'bg-light' : ''"
+                                                style="width:120px;"
+                                                v-model.number="ing.qty" />
+                                            <span class="ml-2 text-muted">{{ ing.unit }}</span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div> <!-- /left column -->
+
+                    <!-- Middle: Mixing card -->
+                    <div style="width:315px;" class="mr-4 p-4">
+                        <!-- Ready to Mix state -->
+                        <div v-if="!mixingStarted && !jobCardSubmitted" class="border rounded p-4 mb-3 text-center">
+                            <div class="mb-2 text-success font-weight-bold">
+                                {{ __('Ready to Mix?') }}
+                            </div>
+                            <div class="text-muted small mb-3">
+                                {{ __('Confirm all materials are loaded and weighed correctly.') }}
+                            </div>
+
+                            <div class="mb-3">
+                                <button v-if="!mixingReady" :disabled="!isMixerSelected || !allAdditionalIngredientsAdded" :class="!isMixerSelected || !allAdditionalIngredientsAdded ? 'btn-disabled-pointer' : ''" class="btn btn-sm border border-success" @click="toggleReady">
+                                    <span class="fa fa-check mr-1"></span>
+                                    {{ __('Confirm Materials') }}
+                                </button>
+
+                                <button v-else class="btn btn-success btn-block py-2" :disabled="mixingStarted" @click="startMixing">
+                                    <span class="fa fa-play mr-1"></span>
+                                    {{ __('Start Mixing') }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Mixing in Progress state -->
+                        <div v-else-if="mixingStarted && !jobCardSubmitted" class="border rounded p-4 mb-3 text-center" style="background:#e8f8ec;">
+                            <div
+                                class="mb-2 text-success font-weight-bold d-flex justify-content-center align-items-center">
+                                <span class="fa fa-spinner fa-spin mr-2"></span>
+                                {{ __('Mixing in Progress') }}
+                            </div>
+                            <div class="display-4 font-weight-bold mb-3" style="font-size:2.5rem;">
+                                {{ formattedMixingTime }}
+                            </div>
+                            <div class="d-flex flex-column gap-2 justify-content-center mb-3">
+                                <button class="btn btn-success flex-fill" @click="finishAndDischarge">
+                                    <span class="fa fa-check mr-1"></span>
+                                    {{ __('Finish & Discharge') }}
+                                </button>
+                                <button class="btn btn-outline-primary flex-fill mt-2 border border-dark" @click="openAddMaterials">
+                                    <span class="fa fa-plus mr-1"></span>
+                                    {{ __('Add Materials') }}
+                                </button>
+                            </div>
+                            
+                            <div class="text-muted small mt-2">
+                                {{ __('Started at {0}', [startedAtLabel]) }}
+                            </div>
+                        </div>
+
+                        <div v-else-if="jobCardSubmitted" class="border rounded p-4 mb-3 text-center" style="background:#fff3cd;">
+                            <div class="mb-3 text-warning font-weight-bold d-flex justify-content-center align-items-center">
+                                <span class="fa fa-cube mr-2"></span>
+                                {{ transferSuccess ? 'Transfer Completed!' : 'Ready for Transfer' }}
+                            </div>
+                            <div class="display-4 font-weight-bold mb-4" style="font-size:2.8rem; color:#856404;">
+                                {{ getDisplayQty().toLocaleString() }}
+                            </div>
+                            <div class="d-flex flex-column gap-2 justify-content-center mb-3">
+                                <button 
+                                    v-if="!transferSuccess.value" 
+                                    :disabled="!getCanTransfer()"
+                                    :class="['btn btn-lg flex-fill', getCanTransfer() ? 'btn-warning' : 'btn-secondary']"
+                                    @click="transferToFGWarehouse">
+                                    <span class="fa fa-truck mr-2"></span>
+                                    {{ getCanTransfer() ? 'Transfer ' + bomQty.toLocaleString() : 'Insufficient Qty' }}
+                                </button>
+                                <div v-else class="alert alert-success">
+                                    <span class="fa fa-check-circle mr-2"></span>
+                                    All transferred to {{ nextWorkOrder }}!
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Safety Override -->
+                        <div class="border rounded p-3 bg-warning-light">
+                            <div class="d-flex">
+                                <span class="fa fa-exclamation-triangle text-warning mr-2"></span>
+                                <div>
+                                    <div class="font-weight-bold text-warning">
+                                        {{ __('Safety Override') }}
+                                    </div>
+                                    <div class="text-muted small">
+                                        {{ __('Only you can override ingredient quantities. All changes are logged for quality assurance.') }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div> <!-- /middle column -->
+
+                    <!-- Right Column: Alerts -->
+                    <!-- <div style="width:300px;">
+                        <div class="mb-2 d-flex align-items-center">
+                            <div>
+                                <div class="d-flex align-items-center">
+                                    <span class="fa fa-exclamation-circle text-danger mr-2"></span>
+                                    <div class="text-danger font-weight-bold">
+                                        {{ __('Downstream Alerts') }}
+                                    </div>
+                                </div>
+                                
+                                <div class="text-muted small">
+                                    {{ __('Real-time alerts from Presser, Cooler & Polishing.') }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-for="(a, idx) in alerts" :key="idx" class="border rounded p-3 mb-3 small" :style="a.tone === 'danger'
+                            ? 'border-left:4px solid #dc3545;background:#ffecec;'
+                            : 'border-left:4px solid #ffc107;background:#fff9e6;'">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="badge badge-light text-danger border border-danger" v-if="a.tone === 'danger'">
+                                    {{ __('QUALITY ISSUE') }}
+                                </span>
+                                <span class="badge badge-light text-warning border border-warning" v-else>
+                                    {{ __('MACHINE PROBLEM') }}
+                                </span>
+                                <div class="text-muted small">{{ a.time }}</div>
+                            </div>
+                            <div class="font-weight-bold mb-1">{{ a.title }}</div>
+                            <div class="text-muted small mb-2">
+                                {{ __('Source: {0}', [a.source]) }}
+                            </div>
+                            <div class="d-flex">
+                                <button class="btn btn-danger btn-xs mr-2" @click="haltFromAlert(a)">
+                                    {{ __('Halt') }}
+                                </button>
+                                <button class="btn btn-light btn-xs" @click="ignoreAlert(idx)">
+                                    {{ __('Ignore') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div> -->
+                    <!-- /right column -->
+                </div> <!-- /main content inner -->
+                
+                <div v-else class="h-100 d-flex align-items-center justify-content-center text-muted">
+                    <div class="text-center">
+                        <div class="fa fa-arrow-left fa-3x mb-3 opacity-20"></div>
+                        <h4>{{ __('Select a Job Card from the sidebar to begin') }}</h4>
                     </div>
                 </div>
-            </div>
 
-            <div v-for="(a, idx) in alerts" :key="idx" class="border rounded p-3 mb-3" :style="a.tone === 'danger'
-                   ? 'border-left:4px solid #dc3545;background:#ffecec;'
-                   : 'border-left:4px solid #ffc107;background:#fff9e6;'">
-                <div class="d-flex justify-content-between mb-1">
-                    <span class="badge badge-light text-danger p-2 border border-danger" v-if="a.tone === 'danger'">
-                        {{ __('QUALITY ISSUE') }}
-                    </span>
-                    <span class="badge badge-light text-warning p-2 border border-warning" v-else>
-                        {{ __('MACHINE PROBLEM') }}
-                    </span>
-                    <div class="text-muted small">{{ a.time }}</div>
-                </div>
-                <div class="font-weight-bold mb-1">{{ a.title }}</div>
-                <div class="text-muted small mb-3">
-                    {{ __('Source: {0}', [a.source]) }}
-                    <template v-if="a.batch">
-                        · {{ batchNo }}
-                    </template>
-                </div>
-                <div class="d-flex">
-                    <button class="btn btn-danger btn-sm mr-2" @click="haltFromAlert(a)">
-                        {{ __('Halt Prod.') }}
-                    </button>
-                    <button class="btn btn-light btn-sm" @click="ignoreAlert(idx)">
-                        {{ __('Ignore') }}
-                    </button>
-                </div>
-            </div>
-        </div> <!-- /right column -->
-
-    </div> <!-- /root -->
+            </div> <!-- /p-4 -->
+        </div> <!-- /flex-grow-1 right column -->
+    </div> <!-- /root container -->
 </template>
 
 <style scoped>
@@ -753,5 +849,40 @@ async function onMixerChange() {
 
 .btn-disabled-pointer {
     cursor: not-allowed;
+}
+
+.jc-card {
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.jc-card:hover {
+    background: #f1f3f5;
+}
+
+.active-jc {
+    background: #e7f5ff !important;
+    border-left: 4px solid #1c7ed6 !important;
+}
+
+.transition-all {
+    transition: all 0.2s ease;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.opacity-50 {
+    opacity: 0.5;
+}
+
+.opacity-20 {
+    opacity: 0.2;
+}
+
+.btn-xs {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
 }
 </style>

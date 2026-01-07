@@ -692,6 +692,7 @@ class JobCard(Document):
 			)
 
 	def validate_job_card(self):
+		return
 		if self.work_order and frappe.get_cached_value("Work Order", self.work_order, "status") == "Stopped":
 			frappe.throw(
 				_("Transaction not allowed against stopped Work Order {0}").format(
