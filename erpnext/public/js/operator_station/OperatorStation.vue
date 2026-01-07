@@ -30,6 +30,7 @@ const line = ref(null);
 const error = ref(null);              
 const batchNo = ref(null);
 const currentStation = ref('');
+const selectedSlab = ref(null);
 const operationMapping = ref({
     "mixing": "distribution",
     "distribution": "pressing", 
@@ -94,8 +95,18 @@ onMounted(async () => {
     jobCardName.value = route[2] || props.job_card;
 
     if (!jobCardName.value) {
-      error.value = __('No Job Card found in route');
-      return;
+      // If no Job Card in route, fetch the first available one for this station
+      const jcQueue = await frappe.call({
+        method: 'erpnext.manufacturing.page.operator_station.operator_station.get_open_job_cards',
+        args: { process: station }
+      });
+      
+      if (jcQueue.message && jcQueue.message.length > 0) {
+        jobCardName.value = jcQueue.message[0].name;
+      } else {
+        error.value = __(`No pending Job Cards found for {0}`, [station]);
+        return;
+      }
     }
 
     const jc = await frappe.db.get_doc('Job Card', jobCardName.value);
@@ -113,7 +124,7 @@ onMounted(async () => {
     if (jobCardSubmitted.value) {
       preparedQty.value = jc.total_completed_qty || jc.for_quantity || 0;
     }
-    await slabInfo(jc, station);
+    // await slabInfo(jc, station);
     const stateRes = await frappe.call({
       method: 'erpnext.manufacturing.page.operator_station.operator_station.get_operator_state',
       args: { 
@@ -154,8 +165,8 @@ onMounted(async () => {
     }
 
     if (processStarted.value && processStartTime.value) {
-      const start = frappe.datetime.str_to_obj(processStartTime.value);
-      const now = frappe.datetime.now_datetime();
+      const start = new Date(processStartTime.value);
+      const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
       const diffSeconds = (new Date(now) - new Date(start)) / 1000;
       processElapsed.value = Math.max(0, Math.floor(diffSeconds));
 
@@ -197,15 +208,18 @@ async function fetchQueue(line, station) {
     else {  
       slabsQueue.value = [];
         const result = await frappe.call({
-          method: 'erpnext.manufacturing.doctype.slab.api.get_slabs_for',
+          method: 'erpnext.manufacturing.doctype.slab.api.get_slabs_for_job_card',
           args: {
-              line: line,
-              next_stage: station
+              job_card: jobCardName.value,
           }
         });
         debugger;
       if (result.message) {
         slabsQueue.value = result.message || [];
+        // If the currently selected slab is no longer in the queue and we haven't started yet, clear it
+        if (selectedSlab.value && !slabsQueue.value.find(s => s.name === selectedSlab.value.name) && !processStarted.value) {
+            selectedSlab.value = null;
+        }
       }
     }
     for (const jobcard of jobcardsQueue.value) {
@@ -247,6 +261,18 @@ async function createSlab(line) {
   }
 }
 
+function selectIncomingSlab(slab) {
+    if (processStarted.value || jobCardSubmitted.value) return;
+    selectedSlab.value = slab;
+    slabNumber.value = slab.serial_number;
+    batchNo.value = slab.batch_number;
+    colour.value = slab.template;
+    frappe.show_alert({
+        message: __(`Selected Slab {0}`, [slab.serial_number]),
+        indicator: 'blue'
+    });
+}
+
 async function slabInfo(jc, station) {
   if (!jc) return;
   const jcSlabRes = await frappe.call({
@@ -255,13 +281,16 @@ async function slabInfo(jc, station) {
   });
   let slab = jcSlabRes.message;
     
-  debugger;
   // If no slab found for this specific Job Card, check if there's one coming from the previous stage
   if (!slab && station.toLowerCase() === 'distribution') {
     await createSlab(jc.production_line);
     return;
   }
   if(!slab){
+    if (station.toLowerCase() !== 'distribution') {
+        // For non-distribution, we expect the user to select a slab from the sidebar
+        return;
+    }
     frappe.msgprint({
       title: 'No Slab Found',
       message: `No available slab found from the previous stage for this Work Order. Ensure the previous step is completed.`,
@@ -287,17 +316,22 @@ async function startOperation() {
         __('Start Distribution now?'),
         async () => {
             try {
+                if (!isDistribution.value && !selectedSlab.value && !jobCardDoc.value.slab) {
+                    frappe.throw(__('Please select a slab from the sidebar first.'));
+                }
+
                 await frappe.call({
                     method: 'erpnext.manufacturing.page.operator_station.operator_station.start_distribution',
                     args: { 
                       job_card: jobCardName.value,
-                      process_name: station
+                      process_name: station,
+                      slab_name: selectedSlab.value?.name
                      }
                 });
                 status.value = 'In Progress';
                 showStartButton.value = false;
                 processStarted.value = true;
-                processStartTime.value = frappe.datetime.now_datetime();
+                processStartTime.value = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
                 processElapsed.value = 0;
                 if (processTimerHandle.value) {
@@ -338,6 +372,8 @@ async function finishOperation() {
         },
     });
     status.value = 'Finished';
+    await slabInfo(jc, station);
+
     processStarted.value = false;
     processStartTime.value = null;
     processElapsed.value = 0;
@@ -453,7 +489,7 @@ function openIssueDialog() {
 }
 
 function submitIssue() {
-  const now = frappe.datetime.now_time();
+  const now = new Date().toLocaleTimeString('en-GB');
   alarms.value.unshift({
     station: 'Mixer',
     type: issueType.value.toUpperCase(),
@@ -507,26 +543,30 @@ function statusStyle() {
           </div>
         </div>
       </div>
-      <div>{{ slabsQueue.length }}</div>
-      <div v-if="false && slabsQueue.length === 0" class="text-muted text-center py-4 bg-white rounded border">
+      <div v-if="!isDistribution && slabsQueue.length === 0" class="text-muted text-center py-4 bg-white rounded border">
         <span class="fa fa-inbox fa-2x mb-2 d-block text-muted-light"></span>
         {{ __('No slabs in queue') }}
       </div>
       
-      <div v-else>
-        <div v-for="item in slabsQueue" :key="item.name" class="card mb-2 shadow-sm slab-card border-0">
-        <div class="card-body p-3 border-left-3 d-flex flex-column justify-content-center align-items-start" style="height: 5rem">
-          <template>
+      <div v-if="!isDistribution">
+        <div v-for="item in slabsQueue" 
+             :key="item.name" 
+             class="card mb-2 shadow-sm slab-card border-0"
+             :class="{ 'selected-slab': selectedSlab?.name === item.name }"
+             @click="selectIncomingSlab(item)"
+             style="cursor: pointer;">
+          <div class="card-body p-3 border-left-3 d-flex flex-column justify-content-center align-items-start" 
+               :style="selectedSlab?.name === item.name ? 'border-left-color: var(--primary); background: #f0f7ff;' : ''"
+               style="height: 5rem">
             <h6 class="card-title mb-1 font-weight-bold">{{ item.batch_number }} - {{ item.serial_number }}</h6>
             <div class="small text-muted mb-1">
                 <span class="fa fa-cube mr-1"></span>{{ item.template }}
             </div>
             <div class="mt-2 text-right">
-                <span class="badge badge-light border">{{ frappe.datetime.str_to_user(item.modified).split(" ")[1] }}</span>
+                <span class="badge badge-light border">{{ new Date(item.modified).toLocaleTimeString('en-GB') }}</span>
             </div>
-           </template>
+          </div>
         </div>
-      </div>
       </div>
       
     </div>

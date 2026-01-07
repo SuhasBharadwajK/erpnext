@@ -264,7 +264,7 @@ def get_slab_from_previous_stage(job_card_name):
         frappe.msgprint(f"Previous WO for '{previous_process}' not found in Production Plan {production_plan}")
         return None
     
-    frappe.msgprint(f"Current WO: {current_wo} ({current_process}) → Previous WO: {previous_wo} ({previous_process})")
+    # frappe.msgprint(f"Current WO: {current_wo} ({current_process}) → Previous WO: {previous_wo} ({previous_process})")
     previous_jcs = frappe.get_all("Job Card", 
         filters={
             "work_order": previous_wo,

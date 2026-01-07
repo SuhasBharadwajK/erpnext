@@ -101,9 +101,22 @@ const get_slabs_ready_for_heating = async () => {
 const currentTime = ref(new Date());
 let timerInterval = null;
 
-onMounted(() => {
+onMounted(async () => {
     const route = frappe.get_route();
     jobCardNumber.value = route[2] || null;
+
+    if (!jobCardNumber.value) {
+        // Fetch the first available Job Card for Heating
+        const jcQueue = await frappe.call({
+            method: 'erpnext.manufacturing.page.operator_station.operator_station.get_open_job_cards',
+            args: { process: 'heating' }
+        });
+        
+        if (jcQueue.message && jcQueue.message.length > 0) {
+            jobCardNumber.value = jcQueue.message[0].name;
+        }
+    }
+
     timerInterval = setInterval(() => {
         currentTime.value = new Date();
     }, 1000);

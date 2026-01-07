@@ -73,9 +73,19 @@ onMounted(async () => {
     jobCard.value = route[2] || null;
 
     if (!jobCard.value) {
-        error.value = __('No Job Card found in route');
-        loadingIngredients.value = false;
-        return;
+        // Fetch the first available Job Card for Mixing
+        const jcQueue = await frappe.call({
+            method: 'erpnext.manufacturing.page.operator_station.operator_station.get_open_job_cards',
+            args: { process: 'mixing' }
+        });
+        
+        if (jcQueue.message && jcQueue.message.length > 0) {
+            jobCard.value = jcQueue.message[0].name;
+        } else {
+            error.value = __('No pending Job Cards found for Mixing');
+            loadingIngredients.value = false;
+            return;
+        }
     }
     await loadMixers();
     const stateRes = await frappe.call({

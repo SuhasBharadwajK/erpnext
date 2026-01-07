@@ -43,12 +43,27 @@ def get_open_job_cards(process):
     return job_cards
 
 @frappe.whitelist()
-def start_distribution(job_card, process_name="operator"):
+def start_distribution(job_card, process_name="operator", slab_name=None):
     """Start the Job Card when mixing starts."""
     print(f"DEBUG: Header transferred_qty={frappe.get_doc("Job Card", job_card)}")
 
     jc = frappe.get_doc("Job Card", job_card)
     start_time = frappe.utils.now_datetime()
+    
+    if slab_name:
+        stage_mapping = {
+            "distribution": "Distribution",
+            "pressing": "Pressing",
+            "cooling": "Cooling",
+            "heating": "Heating",
+            "trimming": "Trimming",
+            "calibration": "Calibration",
+            "polishing": "Polishing"
+        }
+        current_stage = stage_mapping.get(process_name.lower())
+        if current_stage:
+            move_slab_to(slab_name, current_stage, job_card)
+
     args = {
         "job_card_id": jc.name,
         "start_time": start_time,

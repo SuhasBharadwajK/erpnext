@@ -98,7 +98,7 @@ frappe.listview_settings["Job Card"] = {
 				station_page = 'operator-station';
 				station_type = 'operator';
 			}
-			frappe.set_route(station_page, station_type || '', doc.name);
+			frappe.set_route(station_page, station_type || '');
 		}
 	}
 };
