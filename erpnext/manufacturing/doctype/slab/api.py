@@ -121,7 +121,7 @@ def get_slabs_in(line: str, current_stage: str) -> list[dict]:
 	return frappe.db.get_list(
 		"Slab",
 		filters={"line": line, "status": current_stage, "is_cur_stage_complete": False},
-		fields=["name", "number", "serial_number", "status", "line", "batch_number", "template", "creation", "modified"],
+		fields=["name", "number", "serial_number", "status", "line", "batch_number", "template", "is_cur_stage_complete", "creation", "modified"],
 	)
 
 
@@ -158,6 +158,7 @@ def get_slabs_for(line: str, next_stage: str) -> list[dict]:
 			"status",
 			"line",
 			"batch_number",
+			"is_cur_stage_complete",
 			"template",
 			"creation",
 			"modified",
