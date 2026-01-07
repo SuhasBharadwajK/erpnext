@@ -79,9 +79,9 @@ def move_slab_to(
 
 	slab = frappe.get_doc("Slab", slab_number)
 
-    current_stage_index = allowed_stages_lower.index(slab.status.lower())
-    next_stage_index = allowed_stages_lower.index(next_stage.lower())
-    next_stage = ALLOWED_STAGES[next_stage_index]
+	current_stage_index = allowed_stages_lower.index(slab.status.lower())
+	next_stage_index = allowed_stages_lower.index(next_stage.lower())
+	next_stage = ALLOWED_STAGES[next_stage_index]
 
 	# Validation: Check the direction of transition
 	if next_stage_index < current_stage_index or (
@@ -130,12 +130,12 @@ def get_slabs_in(line: str, current_stage: str) -> list[dict]:
 def get_slabs_for(line: str, next_stage: str) -> list[dict]:
     # Determine valid previous stages based on the next_stage and rules
     valid_previous_stages = []
-    
+
     # Check if next_stage is valid
     next_stage = next_stage.title()
     if next_stage in ALLOWED_STAGES:
         target_index = ALLOWED_STAGES.index(next_stage)
-        
+
         # Special handling for Heating (Pressing -> Heating, Re-pressing -> Heating)
         if next_stage == "Heating":
             valid_previous_stages = ["Pressing", "Re-pressing"]
@@ -146,10 +146,10 @@ def get_slabs_for(line: str, next_stage: str) -> list[dict]:
         elif target_index > 0:
             valid_previous_stages = [ALLOWED_STAGES[target_index - 1]]
 
-	if not valid_previous_stages:
-		return []
+    if not valid_previous_stages:
+        return []
 
-	return frappe.db.get_list(
+    return frappe.db.get_list(
 		"Slab",
 		order_by="modified asc",
 		filters={"status": ["in", valid_previous_stages], "is_cur_stage_complete": True, "line": line},
