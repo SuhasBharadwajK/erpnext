@@ -110,11 +110,13 @@ class PurchaseInvoice(BuyingController):
 		cost_center: DF.Link | None
 		credit_to: DF.Link
 		currency: DF.Link | None
+		delivery_note: DF.Data | None
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		dispatch_address: DF.Link | None
 		dispatch_address_display: DF.TextEditor | None
 		due_date: DF.Date | None
+		e_way_bill: DF.Data | None
 		from_date: DF.Date | None
 		grand_total: DF.Currency
 		group_same_items: DF.Check
