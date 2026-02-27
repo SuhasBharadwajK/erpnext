@@ -1,46 +1,72 @@
+from copy import deepcopy
+
 import frappe
-import json
 from frappe import _
 from frappe.utils import flt
+
 from erpnext.manufacturing.doctype.job_card.job_card import (
+	JobCard,
 	make_time_log,
-	make_stock_entry as jc_make_stock_entry,
 )
+from erpnext.manufacturing.doctype.manufacturing_process.constants import (
+	DISTRIBUTION_PROCESS,
+	MFG_PROCESS_MAP,
+	MIXING_PROCESS,
+)
+from erpnext.manufacturing.doctype.operation.api import get_open_job_cards, transfer_to_next_process
+from erpnext.manufacturing.doctype.production_line.production_line import (
+	ProductionLine,
+	get_all_child_lines,
+	get_parent_line,
+)
+from erpnext.manufacturing.doctype.slab.api import checkout_slab, create_slab, get_slabs_for, move_slab_to
+from erpnext.manufacturing.doctype.slab.slab import Slab
 from erpnext.manufacturing.doctype.work_order.work_order import (
 	WorkOrder,
+)
+from erpnext.manufacturing.doctype.work_order.work_order import (
 	make_stock_entry as wo_make_stock_entry,
 )
-from erpnext.manufacturing.doctype.slab.api import move_slab_to
+from erpnext.manufacturing.doctype.workstation.workstation import Workstation
+from erpnext.setup.doctype.employee.api import get_current_user_context
+from erpnext.stock.doctype.warehouse.warehouse import Warehouse
 
 
 @frappe.whitelist()
-def get_operator_state(job_card, process_name="operator"):
-	jc = frappe.get_doc("Job Card", job_card)
+def get_machine_state(job_card, process_name="operator"):
+	jc: JobCard = frappe.get_doc("Job Card", job_card)  # pyright: ignore[reportAssignmentType]
 	if jc.work_order:
-		wo = frappe.get_doc("Work Order", jc.work_order)
+		wo: WorkOrder | None = frappe.get_doc("Work Order", jc.work_order)  # pyright: ignore[reportAssignmentType]
 	else:
-		None
+		wo = None
 
+	wip_wh_name = jc.wip_warehouse
+	wip_wh: Warehouse | None = frappe.get_doc("Warehouse", wip_wh_name)  # pyright: ignore[reportAssignmentType]
+
+	item_name: str = str(wo.item_name) if wo else ""
 	state = {
 		f"{process_name}_started": 1 if jc.time_logs else 0,
 		f"{process_name}_start_time": jc.started_time,
 		"job_card_submitted": jc.docstatus == 1 or jc.status == "Completed",
-		"stock_entry_name": wo.produced_qty > 0 and f"MFG-SE-{process_name.upper()}-*" or "",
+		"stock_entry_name": (wo and wo.produced_qty > 0 and f"MFG-SE-{process_name.upper()}-*") or "",
 		"process_name": process_name,
 		"status": jc.status,
-		"current_process": wo.item_name.rsplit("-", 1)[-1].strip()
-		if wo and "-" in wo.item_name
-		else process_name,
+		"current_process": item_name.rsplit("-", 1)[-1].strip()
+			if wo and "-" in item_name
+			else process_name,
+		"mixer_number": jc.mixer_number,
+		"is_wh_standalone": wip_wh.is_standalone if wip_wh else 0,
 	}
+
 	return state
 
 
 @frappe.whitelist()
-def start_process(job_card, process_name="operator"):
+def start_process(job_card, slab_name="", slab_template="", process_name="operator"):
 	"""Start the Job Card when mixing starts."""
 
-	jc = frappe.get_doc("Job Card", job_card)
-	start_time = frappe.utils.now_datetime()
+	jc: JobCard = frappe.get_doc("Job Card", job_card)  # pyright: ignore[reportAssignmentType]
+	start_time = frappe.utils.now_datetime()  # pyright: ignore[reportAttributeAccessIssue]
 	# employee_id = get_operators("Mixer Operator", jc.production_line)
 
 	args = {
@@ -51,34 +77,57 @@ def start_process(job_card, process_name="operator"):
 	}
 
 	make_time_log(args)
+
+	if slab_name:
+		move_slab_to(
+			slab_number=slab_name,
+			next_stage=process_name.lower(),
+			job_card_number=jc.name,
+		)
+
+	else:
+		if not process_name or process_name.lower() != DISTRIBUTION_PROCESS.lower():
+			raise Exception("Cannot create a new slab outside distribution")
+
+		parent_line = get_parent_line(jc.production_line or "")
+		new_slab = create_slab(parent_line or "", slab_template or "", jc.name)
+		slab_name = new_slab.name
+		slab_template = new_slab.template
+
+	update_slab_number_on_job_card(jc.name, slab_name, slab_template)
+
 	jc.reload()
 	jc.job_started = 1
 	jc.save(ignore_permissions=True)
+
+	start_machine(process_name, jc.production_line, None)
+
 	return {
 		"status": jc.status,
 		f"{process_name}_started": jc.job_started,
 		f"{process_name}_start_time": jc.started_time,
 		"current_time": jc.current_time,
+		"slab_name": jc.slab,
+		"slab_template": jc.slab_template,
 	}
 
 
 @frappe.whitelist()
-def finish_distribution(job_card, process_name="operator"):
+def finish_process(job_card, process_name, transfer_materials=True, should_stop_machine=True):
 	"""Complete the Job Card when mixing is finished."""
-	jc = frappe.get_doc("Job Card", job_card)
+
+	if isinstance(transfer_materials, str):
+		transfer_materials = transfer_materials.lower() == "true"
+
+	if isinstance(should_stop_machine, str):
+		should_stop_machine = should_stop_machine.lower() == "true"
+
+	jc: JobCard = frappe.get_doc("Job Card", job_card)  # pyright: ignore[reportAssignmentType]
 	job_card_qty = flt(jc.total_completed_qty or jc.for_quantity, 3)
-	# total_transferred = sum([item.transferred_qty for item in jc.items])
-	# jc.transferred_qty = total_transferred  # Force header update!
-
-	bom_doc = frappe.get_doc("BOM", jc.bom_no)
-	bom_qty = 0
-
-	for bom_item in bom_doc.items:
-		bom_qty = flt(bom_item.qty)
 
 	args = {
 		"job_card_id": jc.name,
-		"complete_time": frappe.utils.now_datetime(),
+		"complete_time": frappe.utils.now_datetime(),  # pyright: ignore[reportAttributeAccessIssue]
 		"completed_qty": job_card_qty,
 		"status": "Completed",
 	}
@@ -101,11 +150,8 @@ def finish_distribution(job_card, process_name="operator"):
 	jc.db_set("status", "Completed")
 	jc.reload()
 
-	if process_name.lower() != "quality analysis":
-		transfer_slab(job_card, process_name)
-
 	work_order = jc.work_order
-	wo = frappe.get_doc("Work Order", work_order)
+	wo: WorkOrder = frappe.get_doc("Work Order", work_order)  # pyright: ignore[reportAssignmentType]
 	wo.material_transferred_for_manufacturing = job_card_qty
 	wo.flags.ignore_validate_update_after_submit = True
 	wo.save()
@@ -129,6 +175,14 @@ def finish_distribution(job_card, process_name="operator"):
 	wo.reload()
 	wo_status = wo.get_status()
 
+	checkout_slab(jc.slab)
+
+	if transfer_materials:
+		transfer_to_next_process(work_order, job_card_qty, mixer_number=jc.mixer_number)
+
+	if should_stop_machine:
+		stop_machine(process_name, jc.production_line, None)
+
 	return {
 		"status": wo_status,
 		"work_order_status": wo_status,
@@ -141,31 +195,42 @@ def finish_distribution(job_card, process_name="operator"):
 
 
 @frappe.whitelist()
-def get_next_process_bom_qty(current_work_order):
+def get_next_process_bom_qty(current_work_order: str):
 	"""Get BOM qty required for NEXT process"""
-	wo: WorkOrder = frappe.get_doc("Work Order", current_work_order)  # pyright: ignore[reportUnknownParameterType]
-	current_process = wo.item_name.rsplit("-", 1)[-1].strip()
-	process_mapping = {
-		"mixing": "distribution",
-		"distribution": "pressed slab",
-		"pressed slab": "heated slab",
-		"heated slab": "cooled slab",
-		"cooled slab": "trimmed slab",
-		"trimmed slab": "calibrated slab",
-		"calibrated slab": "polished slab",
-		"polished slab": "inspected slab",
-	}
+	wo: WorkOrder = frappe.get_doc("Work Order", current_work_order)  # pyright: ignore
+
+	current_process = wo.operations[0].operation if wo.operations else ""
+
+	process_mapping = deepcopy(MFG_PROCESS_MAP)
+	process_mapping["Mixing Operation - SJ"] = process_mapping[MIXING_PROCESS] # TODO: Find a better way to do this rather than hardcoding the process name
+
 	next_process = process_mapping.get(current_process)
 
-	next_wo = frappe.db.get_value(
+	if not next_process:
+		frappe.throw(_("No next process found after {0}").format(current_process))
+
+	next_wos = frappe.db.get_list(
 		"Work Order",
-		{
+		filters={
 			"production_plan": wo.production_plan,
-			"production_item": ["like", f"%{next_process}%"],
 			"docstatus": ["<", 2],
 		},
-		"name",
+		fields=["name"],
+		ignore_permissions=True,
 	)
+
+	wo_names = [wo.name for wo in next_wos]
+	wo_ops = frappe.db.get_list(
+		"Work Order Operation",
+		filters={
+			"parent": ["in", wo_names],
+			"operation": ["=", next_process],
+		},
+		fields=["parent"],
+		ignore_permissions=True,
+	)
+
+	next_wo = wo_ops[0].parent if wo_ops else None
 
 	if not next_wo:
 		return {"bom_qty": 0}
@@ -185,34 +250,104 @@ def get_next_process_bom_qty(current_work_order):
 	return {"bom_qty": 0}
 
 
+def get_machine(
+	station: str, line_name: str | None = None, machine_name: str | None = None
+) -> Workstation | None:
+	if not line_name or not machine_name:
+		# Get the machine and line from the work context.
+		work_context = get_current_user_context()
+		line_name = line_name or (work_context.get("production_line") if work_context else None)
+		machine_name = machine_name or (work_context.get("workstation_type") if work_context else None)
+
+	if machine_name:
+		return frappe.get_doc("Workstation", machine_name)
+
+	if not machine_name and station and line_name:
+		line: ProductionLine = frappe.get_doc("Production Line", line_name)  # pyright: ignore[reportAssignmentType]
+		# Get the machine from the station and line.
+
+		# Filters should be workstation_type like '%station%' and production_line = line.name or production_line = line.parent
+		return frappe.get_last_doc(
+			"Workstation",
+			filters={
+				"workstation_type": ["like", f"%{station}%"],
+				"production_line": ["in", [line.name, line.parent_line]],
+			},
+		)  # pyright: ignore[reportAssignmentType]
+
+	return None
+
+
+def start_machine(station: str, line_name: str | None, machine_name: str | None):
+	set_machine_status("Production", station, line_name, machine_name)
+
+
+def stop_machine(station: str, line_name: str | None, machine_name: str | None):
+	set_machine_status("Idle", station, line_name, machine_name)
+
+
+def set_machine_status(status: str, station: str, line_name: str | None, machine_name: str | None):
+	machine = get_machine(station, line_name, machine_name)
+	if not machine:
+		return
+
+	machine.status = status  # pyright: ignore[reportAttributeAccessIssue]
+	machine.save(ignore_permissions=True)
+	machine.reload()
+
+
+def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip=True):
+	child_lines = get_all_child_lines(line_name) or []
+	job_card_data = get_top_job_card_for_process(process, child_lines if child_lines else line_name, include_wip)
+	return job_card_data
+
+
 @frappe.whitelist()
-def transfer_slab(job_card, process_name):
-	jc = frappe.get_doc("Job Card", job_card)
+def get_next_work_item(process, line="", include_wip=True):
+	if isinstance(include_wip, str):
+		include_wip = include_wip.lower() == "true"
 
-	slabs = frappe.get_all(
-		"Slab",
-		filters={"current_job_card": jc.name, "status": process_name.lower(), "docstatus": 0},
-		fields=["name", "serial_number", "batch_number", "template", "line", "status"],
-		order_by="creation desc",
-	)
-	if not slabs:
-		frappe.throw(_("No Slabs found for this Job Card"))
+	job_card_data = _get_job_card_for_line_and_process(line, process, include_wip)
+	job_card = job_card_data["top_job_card"]
+	available_job_cards_count = job_card_data["available_job_cards_count"]
 
-	process_mapping = {
-		"distribution": "pressing",
-		"pressing": "heating",
-		"heating": "cooling",
-		"cooling": "quarantine",
-		"quarantine": "trimming",
-		"trimming": "calibration",
-		"calibration": "polishing",
-		"polishing": "Quality Check",
+	slabs_for_process = get_slabs_for(line, process, limit=1000) # Giving an arbitrarily high limit to make sure that the exact number of slabs is fetched.
+	slab = slabs_for_process[0] if slabs_for_process else None
+	available_slabs_count = len(slabs_for_process)
+
+	return {
+		"slab": slab,
+		"available_slabs_count": available_slabs_count,
+		"job_card": job_card,
+		"available_job_cards_count": available_job_cards_count,
 	}
 
-	next_stage = process_mapping.get(process_name)
-	if not next_stage:
-		frappe.throw(_("Invalid process name: {0}").format(process_name))
 
-	move_slab_to(
-		slab_number=slabs[0].name, next_stage=next_stage, job_card_number=jc.name, checkout_and_move=True
-	)
+def get_top_job_card_for_process(process, line: str | list="", include_wip=True):
+	if line and not isinstance(line, list):
+		child_lines = get_all_child_lines(line)
+		if child_lines:
+			line = child_lines
+
+	job_cards = get_open_job_cards(process, line, include_wip)
+	return {
+		"top_job_card": job_cards[0] if job_cards else None,
+		"available_job_cards_count": len(job_cards),
+	}
+	# return job_cards[0] if job_cards else None
+
+
+def update_slab_number_on_job_card(job_card_name, slab_name, slab_template):
+	jc: JobCard = frappe.get_doc("Job Card", job_card_name)
+	jc.slab = slab_name
+	jc.slab_template = slab_template
+	jc.save(ignore_permissions=True)
+	jc.reload()
+
+
+@frappe.whitelist()
+def get_job_card_for_slab(slab_name: str, process_name: str):
+	slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
+	job_card_data = _get_job_card_for_line_and_process(slab.line, process_name, include_wip=True)
+	job_card = job_card_data["top_job_card"]
+	return job_card

@@ -1,19 +1,63 @@
-import frappe
 import json
+
+import frappe
 from frappe import _
 from frappe.utils import flt
+
+from erpnext.manufacturing.doctype.bom.bom import BOM
 from erpnext.manufacturing.doctype.job_card.job_card import (
-	make_time_log,
 	make_stock_entry as jc_make_stock_entry,
 )
+from erpnext.manufacturing.doctype.job_card.job_card import (
+	make_time_log,
+)
+from erpnext.manufacturing.doctype.operation.api import _get_slab_template_from_bom, get_open_job_cards
+from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
 from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry as wo_make_stock_entry
-from erpnext.manufacturing.doctype.operation.api import get_operators
+
+
+@frappe.whitelist()
+def check_distribution_status(production_line):
+	distribution_cards = get_open_job_cards(
+		process="Distribution",
+		line=production_line,
+		include_wip=True,
+		include_material_transferred=True,
+	)
+
+	return {"busy": len(distribution_cards) > 0}
 
 
 @frappe.whitelist()
 def get_mixer_state(job_card):
 	jc = frappe.get_doc("Job Card", job_card)
 	wo = frappe.get_doc("Work Order", jc.work_order) if jc.work_order else None
+
+	next_bom = get_next_process_bom_qty(jc.work_order)
+	next_wo = next_bom.get("next_work_order")
+
+	transferred_qty_to_next = 0
+	if next_wo:
+		transferred_qty_to_next = flt(
+			frappe.db.sql(
+				"""
+				SELECT COALESCE(SUM(sle.actual_qty), 0)
+				FROM `tabStock Ledger Entry` sle
+				INNER JOIN `tabStock Entry` se ON sle.voucher_no = se.name
+				WHERE se.work_order = %s
+				AND sle.item_code = %s
+				AND se.purpose = 'Material Transfer for Manufacture'
+				AND sle.actual_qty > 0
+				AND sle.is_cancelled = 0
+			""",
+				(next_wo, jc.production_item),
+			)[0][0]
+			or 0,
+			3,
+		)
+
+	prepared_qty = wo.produced_qty if wo else jc.total_completed_qty
+	display_qty = flt(prepared_qty - transferred_qty_to_next, 3)
 
 	return {
 		"status": jc.status,
@@ -24,11 +68,14 @@ def get_mixer_state(job_card):
 		"mixer_finished": jc.current_time or 0,
 		"job_card_submitted": jc.status == "Completed",
 		"job_card_completed": jc.total_completed_qty > 0,
-		"prepared_qty": wo.produced_qty if wo else jc.total_completed_qty,
+		"prepared_qty": prepared_qty,
 		"stock_entry_name": wo.produced_qty > 0 and "MFG-SE-*" or "",
 		"work_order_status": wo.get_status() if wo else "Draft",
 		"additional_ingredients_added": jc.additional_ingredients_added,
 		"mixer_number": jc.mixer_number,
+		"transferred_qty_to_next": transferred_qty_to_next,
+		"display_qty": display_qty,
+		"transfer_complete": display_qty <= 0.001,
 	}
 
 
@@ -58,6 +105,7 @@ def get_mixer_ingredients(job_card):
 				"stock_uom": row.stock_uom,
 				"stock_uom_qty": qty,
 				"additional_ingredients_added": jc.additional_ingredients_added,
+				"jc_bom_uom": bom_doc.uom,
 			}
 		)
 
@@ -65,23 +113,24 @@ def get_mixer_ingredients(job_card):
 
 
 @frappe.whitelist()
-def confirm_materials(job_card, ingredients):
+def confirm_materials(job_card, ingredients, bom_uom):
 	"""Create Stock Entry from mixer quantities and mark Job Card ready."""
 	ingredients = json.loads(ingredients)
 	jc = frappe.get_doc("Job Card", job_card)
 
 	qty_by_code = {ing["item_code"]: flt(ing["qty"]) for ing in ingredients}
-	# added_by_code = {ing["item_code"]: bool(ing.get("is_added")) for ing in ingredients}
 
 	for row in jc.items:
 		if row.item_code in qty_by_code:
 			row.required_qty = qty_by_code[row.item_code]
 			# row.additional_ingredients_added = added_by_code.get(row.item_code, 0)
 
-	total_qty = sum(row.required_qty for row in jc.items if row.required_qty > 0)
-	jc.for_quantity = total_qty
-	jc.additional_ingredients_added = 1
-	jc.save(ignore_permissions=True)
+	total_qty = 1
+	if jc.for_quantity != 1 and bom_uom != "Nos":
+		total_qty = sum(row.required_qty for row in jc.items if row.required_qty > 0)
+		jc.for_quantity = total_qty
+		jc.additional_ingredients_added = 1
+		jc.save(ignore_permissions=True)
 
 	se = jc_make_stock_entry(job_card)
 	if not se.items:
@@ -169,6 +218,7 @@ def finish_mixing(job_card, completed_qty):
 	wo.reload()
 	wo_status = wo.get_status()
 	next_bom_data = get_next_process_bom_qty(work_order)
+	mixer_state = get_mixer_state(job_card)
 
 	return {
 		"status": wo_status,
@@ -180,6 +230,8 @@ def finish_mixing(job_card, completed_qty):
 		"stock_entry": se.name,
 		"bom_qty": next_bom_data["bom_qty"],
 		"next_work_order": next_bom_data["next_work_order"],
+		"display_qty": mixer_state["display_qty"],
+		"transfer_complete": mixer_state["transfer_complete"],
 		"message": f"SE {se.name} ({job_card_qty} qty). WO: {wo_status}",
 	}
 
@@ -263,10 +315,12 @@ def quick_add_raw_materials(job_card, raw_material, qty):
 @frappe.whitelist()
 def get_next_process_bom_qty(mixing_work_order):
 	"""Get BOM qty required for NEXT process"""
-	mixing_wo = frappe.get_doc("Work Order", mixing_work_order)
-	current_process = mixing_wo.description.rsplit("-", 1)[-1].strip()
+	mixing_wo: WorkOrder = frappe.get_doc("Work Order", mixing_work_order)  # pyright: ignore[reportAssignmentType]
+	current_process = mixing_wo.operations[0].operation if mixing_wo.operations else ""
+
 	process_mapping = {
 		"Mixing": "Distribution",
+		"Mixing Operation - SJ": "Distribution",
 		"Distribution": "Pressing",
 		"Pressing": "Heating",
 		"Heating": "Cooling",
@@ -275,26 +329,57 @@ def get_next_process_bom_qty(mixing_work_order):
 		"Calibration": "Polishing",
 		"Polishing": "Quality Check",
 	}
-	next_process = process_mapping.get(current_process)
 
-	next_wo = frappe.db.get_value(
+	next_process = process_mapping.get(current_process)
+	bom_doc: BOM = frappe.get_doc("BOM", mixing_wo.bom_no)  # pyright: ignore[reportAssignmentType]
+
+	slab_template = _get_slab_template_from_bom(bom_doc)
+
+	next_wos = frappe.db.get_list(
 		"Work Order",
-		{
+		filters={
 			"production_plan": mixing_wo.production_plan,
-			"description": ["like", f"%{next_process}%"],
 			"docstatus": ["<", 2],
+			"production_item": ["like", f"%{slab_template}%"],
 		},
-		"name",
+		fields=["name"],
+		ignore_permissions=True,
 	)
+
+	wo_names = [wo.name for wo in next_wos]
+	wo_ops = frappe.db.get_list(
+		"Work Order Operation",
+		filters={
+			"parent": ["in", wo_names],
+			"operation": ["=", next_process],
+		},
+		fields=["parent"],
+		ignore_permissions=True,
+	)
+
+	next_wo = wo_ops[0].parent if wo_ops else None
+
+	if not next_wo:
+		next_wo = frappe.db.get_value(
+			"Work Order",
+			{
+				"production_plan": mixing_wo.production_plan,
+				"item_name": ["like", f"%{next_process}%"],
+				"docstatus": ["<", 2],
+				"production_item": ["like", f"%{slab_template}%"],
+			},
+			"name",
+		)
+
 
 	if not next_wo:
 		return {"bom_qty": 0}
 
 	next_wo_doc = frappe.get_doc("Work Order", next_wo)
-	bom_doc = frappe.get_doc("BOM", next_wo_doc.bom_no)
+	next_bom_doc = frappe.get_doc("BOM", next_wo_doc.bom_no)
 	fg_item = mixing_wo.production_item
 
-	for bom_item in bom_doc.items:
+	for bom_item in next_bom_doc.items:
 		if bom_item.item_code == fg_item:
 			return {
 				"bom_qty": flt(bom_item.stock_qty),
@@ -306,13 +391,12 @@ def get_next_process_bom_qty(mixing_work_order):
 
 
 @frappe.whitelist()
-def get_all_mixers(job_card, production_line=None):
-	filters = {}
-	if job_card:
-		jc = frappe.get_doc("Job Card", job_card)
-		filters["line_no"] = jc.production_line or production_line
-
-	mixers_list = frappe.get_all("Mixer", filters=filters, order_by="line_no")
+def get_all_mixers(production_line=None):
+	filters = {
+		"production_line": production_line,
+		"workstation_type": "Mixing",
+	}
+	mixers_list = frappe.get_all("Workstation", filters=filters)
 	return mixers_list
 
 

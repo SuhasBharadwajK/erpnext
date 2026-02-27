@@ -1,49 +1,74 @@
+import re
+from copy import deepcopy
+
 import frappe
-import json
 from frappe import _
 from frappe.utils import flt
 
+from erpnext.manufacturing.doctype.bom.bom import BOM
+from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP, MIXING_PROCESS
+from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
+from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
+
 
 @frappe.whitelist()
-def transfer_to_next_process(current_work_order, qty=None):
+def transfer_to_next_process(current_work_order, qty=None, process=None, mixer_number=None):
 	"""Transfer FG from Mixing → Next Process Source Warehouse."""
-	wo = frappe.get_doc("Work Order", current_work_order)
+	wo: WorkOrder = frappe.get_doc("Work Order", current_work_order) #pyright: ignore
 	fg_item = wo.production_item
 	fg_qty = flt(qty or wo.produced_qty)
 
-	process_mapping = {
-		"mixing": "distribution",
-		"distribution": "pressed slab",
-		"pressed slab": "heated slab",
-		"heated slab": "cooled slab",
-		"cooled slab": "trimmed slab",
-		"trimmed slab": "calibrated slab",
-		"calibrated slab": "polished slab",
-		"polished slab": "inspected slab",
-	}
+	process_mapping = deepcopy(MFG_PROCESS_MAP)
+	process_mapping["Mixing Operation - SJ"] = process_mapping[MIXING_PROCESS] # TODO: Find a better way to do this rather than hardcoding the process name
 
-	current_process = (
-		wo.production_item.rsplit("-", 1)[-1].strip().lower() if "-" in wo.production_item else ""
-	)
+	current_process = wo.operations[0].operation if wo.operations else ""
+
 	next_process = process_mapping.get(current_process)
 
 	if not next_process:
 		frappe.throw(_("No next process found after {0}").format(current_process))
 
-	next_wo = frappe.db.get_value(
+	bom_doc: BOM = frappe.get_doc("BOM", wo.bom_no) #pyright: ignore
+
+	slab_template = _get_slab_template_from_bom(bom_doc)
+
+	next_wos = frappe.db.get_list(
 		"Work Order",
-		{
+		filters={
 			"production_plan": wo.production_plan,
-			"production_item": ["like", f"%{next_process}%"],
 			"docstatus": ["<", 2],
+			"production_item": ["like", f"%{slab_template}%"],
 		},
-		"name",
+		fields=["name"],
+		ignore_permissions=True,
 	)
 
+	wo_names = [wo.name for wo in next_wos]
+	wo_ops = frappe.db.get_list(
+		"Work Order Operation",
+		filters={
+			"parent": ["in", wo_names],
+			"operation": ["=", next_process],
+		},
+		fields=["parent"],
+		ignore_permissions=True,
+	)
+
+	next_wo = wo_ops[0].parent if wo_ops else None
+
 	if not next_wo:
-		all_wos = frappe.get_all(
-			"Work Order", filters={"production_plan": wo.production_plan}, fields=["name", "production_item"]
+		next_wo = frappe.db.get_value(
+			"Work Order",
+			{
+				"production_plan": wo.production_plan,
+				"item_name": ["like", f"%{next_process}%"],
+				"docstatus": ["<", 2],
+				"production_item": ["like", f"%{slab_template}%"],
+			},
+			"name",
 		)
+
+	if not next_wo:
 		frappe.throw(f"Next WO for '{next_process}' not found.")
 
 	next_wo_doc = frappe.get_doc("Work Order", next_wo)
@@ -71,10 +96,10 @@ def transfer_to_next_process(current_work_order, qty=None):
 	if not job_card_item:
 		frappe.throw(f"No Job Card Item found for {fg_item} in {open_job_card}")
 
-	se = frappe.new_doc("Stock Entry")
+	se: StockEntry = frappe.new_doc("Stock Entry") #pyright: ignore
 	se.purpose = "Material Transfer for Manufacture"
-	se.work_order = next_wo
-	se.job_card = open_job_card  # No job card for inter-process transfer
+	se.work_order = next_wo #pyright: ignore
+	se.job_card = open_job_card #pyright: ignore # No job card for inter-process transfer
 	se.company = wo.company
 	se.fg_completed_qty = transfer_qty
 
@@ -103,9 +128,14 @@ def transfer_to_next_process(current_work_order, qty=None):
 
 	open_jc_doc = frappe.get_doc("Job Card", open_job_card)
 	open_jc_doc.transferred_qty = sum(item.transferred_qty for item in open_jc_doc.items)
+	if mixer_number:
+		open_jc_doc.mixer_number = mixer_number
 	open_jc_doc.save(ignore_permissions=True)
 
 	frappe.db.commit()
+
+	if process == "Mixing":
+		frappe.publish_realtime("refresh_operator_station")
 
 	return {
 		"status": "Success",
@@ -119,6 +149,7 @@ def transfer_to_next_process(current_work_order, qty=None):
 		"transferred_qty_updated": job_card_item_doc.transferred_qty,  # ✅ New!
 		"header_transferred_qty": open_jc_doc.transferred_qty,
 		"message": f"Transferred {fg_qty} {fg_item} to {next_wo}",
+		"mixer_number": mixer_number,
 	}
 
 
@@ -148,7 +179,7 @@ def get_recent_job_card(operation):
 
 
 @frappe.whitelist()
-def get_open_job_cards(process):
+def get_open_job_cards(process, line=None, include_wip=True, include_material_transferred=True):
 	# employee_id = frappe.db.get_value("Employee", {"user_id": frappe.session.user})
 	if process == "Mixing":
 		filters = {
@@ -157,18 +188,60 @@ def get_open_job_cards(process):
 			"operation": ["like", "%Mixing%"],
 		}
 	else:
+		workstation_names = [x.workstation_name for x in _get_workstations(process)]
+
+		if workstation_names:
+			ws_query = ["in", workstation_names]
+		else:
+			ws_query = ["like", f"%{process}%"]
+
+		in_query = []
+
+		if include_material_transferred:
+			in_query.append("Material Transferred")
+
+		if include_wip:
+			in_query.append("Work In Progress")
+
 		filters = {
-			"status": ["in", ["Material Transferred", "Work In Progress"]],
+			"status": ["in", in_query],
 			"docstatus": 0,
-			"workstation": ["like", f"%{process}%"],
+			"workstation": ws_query,
 		}
+
+	if line:
+		if isinstance(line, list):
+			filters["production_line"] = ["in", line]
+		else:
+			filters["production_line"] = line
+
 	job_cards = frappe.get_all(
 		"Job Card",
+		# limit=1,
 		filters=filters,
-		fields=["name", "work_order", "status", "production_item", "creation"],
-		order_by="creation asc",
+		fields=[
+			"name",
+			"work_order",
+			"status",
+			"production_item",
+			"slab",
+			"slab_template",
+			"started_time",
+			"creation",
+		],
+		order_by="modified asc",
+		ignore_permissions=True,
 	)
+
 	return job_cards
+
+
+def _get_workstations(workstation_type: str):
+	return frappe.get_all(
+		"Workstation",
+		filters={"workstation_type": ["like", f"%{workstation_type}%"]},
+		fields=["workstation_name"],
+	)
 
 
 @frappe.whitelist()
@@ -184,3 +257,13 @@ def get_operators(designation, production_line):
 		frappe.throw(f"No operator found: designation={designation}, line={production_line}")
 
 	return employee_name
+
+
+def _get_slab_template_from_bom(bom_doc):
+	template_components = bom_doc.slab_template.split("-") if bom_doc.slab_template else []
+	size_index = 2 # TODO: This depends on the template's naming structure. Use a reliable way to do it like fetching the slab template and then the size from within it.
+	for index, _ in enumerate(template_components):
+		if index == size_index:
+			template_components[index] = re.sub(r"00", "CM", template_components[index])
+	slab_template = "-".join(template_components)
+	return slab_template
