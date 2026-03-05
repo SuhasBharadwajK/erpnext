@@ -78,12 +78,13 @@ class JournalEntry(AccountsController):
 		payment_order: DF.Link | None
 		posting_date: DF.Date
 		process_deferred_accounting: DF.Link | None
-		ref_guid: DF.Data | None
 		remark: DF.SmallText | None
 		reversal_of: DF.Link | None
 		select_print_heading: DF.Link | None
 		stock_entry: DF.Link | None
 		tally_guid: DF.Data | None
+		tally_ref_date: DF.Date | None
+		tally_ref_no: DF.Data | None
 		tally_voucher_number: DF.Data | None
 		tally_voucher_type: DF.Data | None
 		tax_withholding_category: DF.Link | None

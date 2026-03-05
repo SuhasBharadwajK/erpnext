@@ -30,6 +30,9 @@
   "amended_from",
   "supplier_invoice_details",
   "bill_no",
+  "delivery_note",
+  "column_break_obpc",
+  "e_way_bill",
   "column_break_15",
   "bill_date",
   "accounting_dimensions_section",
@@ -202,8 +205,10 @@
   "tally_reference_section",
   "tally_guid",
   "tally_voucher_type",
-  "column_break_3hyr",
   "tally_voucher_number",
+  "column_break_3hyr",
+  "tally_ref_no",
+  "tally_ref_date",
   "connections_tab"
  ],
  "fields": [
@@ -1677,14 +1682,36 @@
   {
    "fieldname": "tally_voucher_type",
    "fieldtype": "Data",
-   "label": "Voucher Type",
-   "read_only": 1
+   "label": "Voucher Type"
   },
   {
    "fieldname": "tally_voucher_number",
    "fieldtype": "Data",
-   "label": "Voucher Number",
-   "read_only": 1
+   "label": "Voucher Number"
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Data",
+   "label": "Delivery Note"
+  },
+  {
+   "fieldname": "column_break_obpc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "e_way_bill",
+   "fieldtype": "Data",
+   "label": "E Way Bill"
+  },
+  {
+   "fieldname": "tally_ref_no",
+   "fieldtype": "Data",
+   "label": "Ref No"
+  },
+  {
+   "fieldname": "tally_ref_date",
+   "fieldtype": "Date",
+   "label": "Ref Date"
   }
  ],
  "grid_page_length": 50,
@@ -1692,7 +1719,7 @@
  "idx": 204,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-02-12 19:23:25.126977",
+ "modified": "2026-03-05 15:31:38.615975",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice",

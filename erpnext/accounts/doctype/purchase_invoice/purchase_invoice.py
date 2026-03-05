@@ -110,11 +110,13 @@ class PurchaseInvoice(BuyingController):
 		cost_center: DF.Link | None
 		credit_to: DF.Link
 		currency: DF.Link | None
+		delivery_note: DF.Data | None
 		disable_rounded_total: DF.Check
 		discount_amount: DF.Currency
 		dispatch_address: DF.Link | None
 		dispatch_address_display: DF.TextEditor | None
 		due_date: DF.Date | None
+		e_way_bill: DF.Data | None
 		from_date: DF.Date | None
 		grand_total: DF.Currency
 		group_same_items: DF.Check
@@ -176,6 +178,8 @@ class PurchaseInvoice(BuyingController):
 		supplier_name: DF.Data | None
 		supplier_warehouse: DF.Link | None
 		tally_guid: DF.Data | None
+		tally_ref_date: DF.Date | None
+		tally_ref_no: DF.Data | None
 		tally_voucher_number: DF.Data | None
 		tally_voucher_type: DF.Data | None
 		tax_category: DF.Link | None
