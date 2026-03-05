@@ -69,9 +69,10 @@
   "tally_references_section",
   "tally_guid",
   "tally_voucher_type",
-  "column_break_1nte",
   "tally_voucher_number",
-  "ref_guid"
+  "column_break_1nte",
+  "tally_ref_no",
+  "tally_ref_date"
  ],
  "fields": [
   {
@@ -568,14 +569,12 @@
   {
    "fieldname": "tally_guid",
    "fieldtype": "Data",
-   "label": "GUID",
-   "read_only": 0
+   "label": "GUID"
   },
   {
    "fieldname": "tally_voucher_type",
    "fieldtype": "Data",
-   "label": "Voucher Type",
-   "read_only": 0
+   "label": "Voucher Type"
   },
   {
    "fieldname": "column_break_1nte",
@@ -584,8 +583,17 @@
   {
    "fieldname": "tally_voucher_number",
    "fieldtype": "Data",
-   "label": "Voucher Number",
-   "read_only": 0
+   "label": "Voucher Number"
+  },
+  {
+   "fieldname": "tally_ref_no",
+   "fieldtype": "Data",
+   "label": "Ref No"
+  },
+  {
+   "fieldname": "tally_ref_date",
+   "fieldtype": "Date",
+   "label": "Ref Date"
   }
  ],
  "icon": "fa fa-file-text",
@@ -600,7 +608,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-01-24 17:25:49.187946",
+ "modified": "2026-03-05 15:33:21.068653",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Journal Entry",

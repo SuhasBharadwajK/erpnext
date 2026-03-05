@@ -103,8 +103,10 @@
   "tally_references_section",
   "tally_guid",
   "tally_voucher_type",
+  "tally_voucher_number",
   "column_break_0ehw",
-  "tally_voucher_number"
+  "tally_ref_no",
+  "tally_ref_date"
  ],
  "fields": [
   {
@@ -818,6 +820,16 @@
    "fieldtype": "Data",
    "label": "Voucher Number",
    "read_only": 1
+  },
+  {
+   "fieldname": "tally_ref_no",
+   "fieldtype": "Data",
+   "label": "Ref No"
+  },
+  {
+   "fieldname": "tally_ref_date",
+   "fieldtype": "Date",
+   "label": "Ref Date"
   }
  ],
  "grid_page_length": 50,
@@ -832,7 +844,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-02-24 14:22:19.788499",
+ "modified": "2026-03-05 15:36:13.735373",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

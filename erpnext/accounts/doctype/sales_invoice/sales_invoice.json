@@ -218,9 +218,10 @@
   "tally_references_section",
   "tally_guid",
   "tally_voucher_type",
-  "column_break_9bht",
   "tally_voucher_number",
-  "ref_guid",
+  "column_break_9bht",
+  "tally_ref_no",
+  "tally_ref_date",
   "connections_tab"
  ],
  "fields": [
@@ -2202,14 +2203,12 @@
   {
    "fieldname": "tally_guid",
    "fieldtype": "Data",
-   "label": "GUID",
-   "read_only": 0
+   "label": "GUID"
   },
   {
    "fieldname": "tally_voucher_type",
    "fieldtype": "Data",
-   "label": "Voucher Type",
-   "read_only": 0
+   "label": "Voucher Type"
   },
   {
    "fieldname": "column_break_9bht",
@@ -2218,8 +2217,17 @@
   {
    "fieldname": "tally_voucher_number",
    "fieldtype": "Data",
-   "label": "Voucher Number",
-   "read_only": 0
+   "label": "Voucher Number"
+  },
+  {
+   "fieldname": "tally_ref_no",
+   "fieldtype": "Data",
+   "label": "Ref No"
+  },
+  {
+   "fieldname": "tally_ref_date",
+   "fieldtype": "Date",
+   "label": "Ref Date"
   }
  ],
  "grid_page_length": 50,
@@ -2233,7 +2241,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2026-01-24 17:36:23.159933",
+ "modified": "2026-03-05 15:32:49.883570",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",
