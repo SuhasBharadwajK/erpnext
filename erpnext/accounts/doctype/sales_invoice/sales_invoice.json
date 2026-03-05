@@ -2202,11 +2202,13 @@
    "label": "Tally References"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "tally_guid",
    "fieldtype": "Data",
    "label": "GUID"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "tally_voucher_type",
    "fieldtype": "Data",
    "label": "Voucher Type"
@@ -2216,16 +2218,19 @@
    "fieldtype": "Column Break"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "tally_voucher_number",
    "fieldtype": "Data",
    "label": "Voucher Number"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "tally_ref_no",
    "fieldtype": "Data",
    "label": "Ref No"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "tally_ref_date",
    "fieldtype": "Date",
    "label": "Ref Date"
@@ -2242,7 +2247,7 @@
    "link_fieldname": "consolidated_invoice"
   }
  ],
- "modified": "2026-03-05 17:22:39.994263",
+ "modified": "2026-03-05 17:52:28.320408",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Sales Invoice",
