@@ -183,6 +183,8 @@ class SalesInvoice(SellingController):
 		tally_guid: DF.Data | None
 		tally_voucher_number: DF.Data | None
 		tally_voucher_type: DF.Data | None
+		tally_ref_date: DF.Date | None
+		tally_ref_no: DF.Data | None
 		tax_category: DF.Link | None
 		tax_id: DF.Data | None
 		taxes: DF.Table[SalesTaxesandCharges]

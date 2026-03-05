@@ -137,6 +137,8 @@ class PaymentEntry(AccountsController):
 		tally_guid: DF.Data | None
 		tally_voucher_number: DF.Data | None
 		tally_voucher_type: DF.Data | None
+		tally_ref_date: DF.Date | None
+		tally_ref_no: DF.Data | None
 		target_exchange_rate: DF.Float
 		tax_withholding_category: DF.Link | None
 		taxes: DF.Table[AdvanceTaxesandCharges]
