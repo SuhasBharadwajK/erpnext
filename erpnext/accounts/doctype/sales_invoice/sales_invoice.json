@@ -2205,12 +2205,14 @@
    "allow_on_submit": 1,
    "fieldname": "tally_guid",
    "fieldtype": "Data",
+   "read_only": 1,
    "label": "GUID"
   },
   {
    "allow_on_submit": 1,
    "fieldname": "tally_voucher_type",
    "fieldtype": "Data",
+   "read_only": 1,
    "label": "Voucher Type"
   },
   {
@@ -2221,18 +2223,21 @@
    "allow_on_submit": 1,
    "fieldname": "tally_voucher_number",
    "fieldtype": "Data",
+   "read_only": 1,
    "label": "Voucher Number"
   },
   {
    "allow_on_submit": 1,
    "fieldname": "tally_ref_no",
    "fieldtype": "Data",
+   "read_only": 1,
    "label": "Ref No"
   },
   {
    "allow_on_submit": 1,
    "fieldname": "tally_ref_date",
    "fieldtype": "Date",
+   "read_only": 1,
    "label": "Ref Date"
   }
  ],
