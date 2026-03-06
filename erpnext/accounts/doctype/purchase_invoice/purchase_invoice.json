@@ -1664,6 +1664,16 @@
    "label": "Last Scanned Warehouse"
   },
   {
+   "fieldname": "delivery_note",
+   "fieldtype": "Data",
+   "label": "Delivery Note"
+  },
+  {
+   "fieldname": "e_way_bill",
+   "fieldtype": "Data",
+   "label": "E Way Bill"
+  },
+  {
    "collapsible": 1,
    "fieldname": "tally_reference_section",
    "fieldtype": "Section Break",
@@ -1682,35 +1692,29 @@
   {
    "fieldname": "tally_voucher_type",
    "fieldtype": "Data",
+   "read_only": 1,
    "label": "Voucher Type"
   },
   {
    "fieldname": "tally_voucher_number",
    "fieldtype": "Data",
+   "read_only": 1,
    "label": "Voucher Number"
-  },
-  {
-   "fieldname": "delivery_note",
-   "fieldtype": "Data",
-   "label": "Delivery Note"
   },
   {
    "fieldname": "column_break_obpc",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "e_way_bill",
-   "fieldtype": "Data",
-   "label": "E Way Bill"
-  },
-  {
    "fieldname": "tally_ref_no",
    "fieldtype": "Data",
+   "read_only": 1,
    "label": "Ref No"
   },
   {
    "fieldname": "tally_ref_date",
    "fieldtype": "Date",
+   "read_only": 1,
    "label": "Ref Date"
   }
  ],
