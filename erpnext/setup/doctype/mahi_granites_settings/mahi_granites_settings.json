@@ -14,11 +14,15 @@
   "sales_invoice_patterns_section",
   "sales_invoice_patterns",
   "manufacturing_settings_section",
+  "slab_section",
+  "slab_seeds",
+  "mixing_section",
+  "show_job_card_queue_to_mixer_operators",
   "oven_section",
   "max_heating_minutes",
-  "quarantine_section",
-  "min_quarantine_hours",
-  "quarantine_labels",
+  "curing_section",
+  "min_curing_hours",
+  "curing_labels",
   "quality_section",
   "grades"
  ],
@@ -42,21 +46,21 @@
    "label": "Manufacturing Settings"
   },
   {
-   "fieldname": "quarantine_labels",
+   "fieldname": "curing_labels",
    "fieldtype": "Table",
-   "label": "Quarantine Labels",
-   "options": "Quarantine Label"
+   "label": "Curing Labels",
+   "options": "Curing Label"
   },
   {
-   "fieldname": "quarantine_section",
+   "fieldname": "curing_section",
    "fieldtype": "Section Break",
-   "label": "Quarantine"
+   "label": "Curing"
   },
   {
    "default": "0",
-   "fieldname": "min_quarantine_hours",
+   "fieldname": "min_curing_hours",
    "fieldtype": "Float",
-   "label": "Minimum Quarantine Time (in hours)"
+   "label": "Minimum Curing Time (in hours)"
   },
   {
    "fieldname": "oven_section",
@@ -113,13 +117,37 @@
    "fieldtype": "Table",
    "label": "Comma-separated values denoting the the first few characters of the Sales Invoice numbers of each company.",
    "options": "Sales Invoice Series"
+  },
+  {
+   "fieldname": "slab_section",
+   "fieldtype": "Section Break",
+   "label": "Slab"
+  },
+  {
+   "default": "0",
+   "description": "The initial seed that is to be given to the slab number on each line to make sure the system is in sync with the manufacturing floor.",
+   "fieldname": "slab_seeds",
+   "fieldtype": "Table",
+   "label": "Slab Seeds",
+   "options": "Slab Seed"
+  },
+  {
+   "fieldname": "mixing_section",
+   "fieldtype": "Section Break",
+   "label": "Mixing"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_job_card_queue_to_mixer_operators",
+   "fieldtype": "Check",
+   "label": "Show Job Card Queue to Mixer Operators"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-02-21 20:36:16.955988",
+ "modified": "2026-04-02 18:14:30.693905",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Mahi Granites Settings",
@@ -134,6 +162,13 @@
    "role": "System Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Employee",
+   "share": 1
   }
  ],
  "row_format": "Dynamic",

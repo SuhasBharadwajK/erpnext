@@ -4,16 +4,16 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-01-05 23:49:20.678733",
+ "modified": "2026-03-18 23:28:17.786374",
  "modified_by": "Administrator",
  "module": "Manufacturing",
- "name": "quarantine-station",
+ "name": "curing-station",
  "owner": "Administrator",
- "page_name": "quarantine-station",
+ "page_name": "curing-station",
  "roles": [],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Quarantine Station"
+ "title": "Curing Station"
 }

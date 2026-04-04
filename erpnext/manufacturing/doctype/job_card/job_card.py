@@ -4,6 +4,7 @@ import datetime
 import json
 from collections import OrderedDict
 
+from erpnext.manufacturing.doctype.production_line.production_line import get_parent_line
 import frappe
 from frappe import _, bold
 from frappe.model.document import Document
@@ -81,6 +82,7 @@ class JobCard(Document):
 		for_quantity: DF.Float
 		hour_rate: DF.Currency
 		is_corrective_job_card: DF.Check
+		is_finished: DF.Check
 		item_name: DF.ReadOnly | None
 		items: DF.Table[JobCardItem]
 		job_started: DF.Check
@@ -90,6 +92,7 @@ class JobCard(Document):
 		operation_id: DF.Data | None
 		operation_row_number: DF.Literal[None]
 		posting_date: DF.Date | None
+		priority: DF.Int
 		process_loss_qty: DF.Float
 		production_item: DF.Link | None
 		production_line: DF.Link | None
@@ -137,6 +140,38 @@ class JobCard(Document):
 
 	def before_validate(self):
 		self.set_wip_warehouse()
+
+	def set_workstation(self):
+		if not self.operation or not self.production_line:
+			return
+
+		workstation_type = self.operation.split()[0]
+		parent_line = get_parent_line(self.production_line)
+		
+		workstation = frappe.db.get_value(
+			"Workstation",
+			{
+				"workstation_type": ["like", f"{workstation_type}%"],
+				"production_line": self.production_line,
+			},
+			["name", "workstation_type"],
+			as_dict=True,
+		)
+
+		if not workstation and parent_line:
+			workstation = frappe.db.get_value(
+			"Workstation",
+			{
+				"workstation_type": self.operation,
+				"production_line": parent_line,
+			},
+			["name", "workstation_type"],
+			as_dict=True,
+		)
+
+		if workstation:
+			self.workstation = workstation.name
+			self.workstation_type = workstation.workstation_type
 
 	def validate(self):
 		self.validate_time_logs()

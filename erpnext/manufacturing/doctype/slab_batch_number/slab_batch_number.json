@@ -1,36 +1,31 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
- "autoname": "field:height",
- "creation": "2025-12-18 12:30:31.287039",
+ "autoname": "SLAB-BATCH-.###",
+ "creation": "2026-04-03 18:47:12.500120",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "section_break_tezp",
-  "height"
+  "date"
  ],
  "fields": [
   {
-   "fieldname": "section_break_tezp",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "height",
-   "fieldtype": "Int",
+   "fieldname": "date",
+   "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Height (in mm)",
-   "reqd": 1,
-   "unique": 1
+   "label": "Date",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-12-18 20:08:10.491353",
+ "modified": "2026-04-01 06:12:53.549043",
  "modified_by": "Administrator",
  "module": "Manufacturing",
- "name": "Slab Thickness",
- "naming_rule": "By fieldname",
+ "name": "Slab Batch Number",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {

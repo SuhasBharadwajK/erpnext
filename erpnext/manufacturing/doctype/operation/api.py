@@ -1,3 +1,4 @@
+from erpnext.manufacturing.doctype.job_card.constants import LOW_PRIORITY
 import re
 from copy import deepcopy
 
@@ -6,20 +7,23 @@ from frappe import _
 from frappe.utils import flt
 
 from erpnext.manufacturing.doctype.bom.bom import BOM
+from erpnext.manufacturing.doctype.job_card.job_card import JobCard
 from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP, MIXING_PROCESS
 from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
 from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
 
 
 @frappe.whitelist()
-def transfer_to_next_process(current_work_order, qty=None, process=None, mixer_number=None):
+def transfer_to_next_process(current_job_card, current_work_order, qty=None, process=None, mixer_number=None):
 	"""Transfer FG from Mixing → Next Process Source Warehouse."""
-	wo: WorkOrder = frappe.get_doc("Work Order", current_work_order) #pyright: ignore
+	wo: WorkOrder = frappe.get_doc("Work Order", current_work_order)  # pyright: ignore
 	fg_item = wo.production_item
 	fg_qty = flt(qty or wo.produced_qty)
 
 	process_mapping = deepcopy(MFG_PROCESS_MAP)
-	process_mapping["Mixing Operation - SJ"] = process_mapping[MIXING_PROCESS] # TODO: Find a better way to do this rather than hardcoding the process name
+	process_mapping["Mixing Operation - SJ"] = process_mapping[
+		MIXING_PROCESS
+	]  # TODO: Find a better way to do this rather than hardcoding the process name
 
 	current_process = wo.operations[0].operation if wo.operations else ""
 
@@ -28,7 +32,7 @@ def transfer_to_next_process(current_work_order, qty=None, process=None, mixer_n
 	if not next_process:
 		frappe.throw(_("No next process found after {0}").format(current_process))
 
-	bom_doc: BOM = frappe.get_doc("BOM", wo.bom_no) #pyright: ignore
+	bom_doc: BOM = frappe.get_doc("BOM", wo.bom_no)  # pyright: ignore
 
 	slab_template = _get_slab_template_from_bom(bom_doc)
 
@@ -38,6 +42,7 @@ def transfer_to_next_process(current_work_order, qty=None, process=None, mixer_n
 			"production_plan": wo.production_plan,
 			"docstatus": ["<", 2],
 			"production_item": ["like", f"%{slab_template}%"],
+			"production_line": wo.production_line,
 		},
 		fields=["name"],
 		ignore_permissions=True,
@@ -86,6 +91,8 @@ def transfer_to_next_process(current_work_order, qty=None, process=None, mixer_n
 			transfer_qty = flt(bom_item.stock_qty)
 			break
 
+	_set_job_card_completion_status(current_job_card, transfer_qty, fg_qty)
+
 	if transfer_qty == 0:
 		frappe.throw(f"BOM qty for {fg_item} not found in {next_wo} BOM")
 
@@ -96,12 +103,13 @@ def transfer_to_next_process(current_work_order, qty=None, process=None, mixer_n
 	if not job_card_item:
 		frappe.throw(f"No Job Card Item found for {fg_item} in {open_job_card}")
 
-	se: StockEntry = frappe.new_doc("Stock Entry") #pyright: ignore
+	se: StockEntry = frappe.new_doc("Stock Entry")  # pyright: ignore
 	se.purpose = "Material Transfer for Manufacture"
-	se.work_order = next_wo #pyright: ignore
-	se.job_card = open_job_card #pyright: ignore # No job card for inter-process transfer
+	se.work_order = next_wo  # pyright: ignore
+	se.job_card = open_job_card  # pyright: ignore # No job card for inter-process transfer
 	se.company = wo.company
 	se.fg_completed_qty = transfer_qty
+	se.previous_job_card = current_job_card
 
 	se.append(
 		"items",
@@ -154,7 +162,7 @@ def transfer_to_next_process(current_work_order, qty=None, process=None, mixer_n
 
 
 @frappe.whitelist()
-def get_recent_job_card(operation):
+def get_recent_job_card(operation, production_line=None):
 	if operation == "Mixing":
 		filters = {
 			"status": ["in", ["Open", "Material Transferred", "Work In Progress", "Completed"]],
@@ -167,25 +175,33 @@ def get_recent_job_card(operation):
 			"docstatus": 0,
 			"operation": ["like", f"%{operation}%"],
 		}
+
+	if production_line:
+		filters["production_line"] = production_line
+
 	job_cards = frappe.db.get_list(
 		"Job Card",
 		filters=filters,
 		fields=["name", "operation", "status", "work_order"],
 		order_by="creation asc",
 	)
+
 	if len(job_cards) == 0:
 		frappe.throw(_("No job cards found for operation {0}").format(operation))
 	return job_cards[0]
 
 
 @frappe.whitelist()
-def get_open_job_cards(process, line=None, include_wip=True, include_material_transferred=True):
-	# employee_id = frappe.db.get_value("Employee", {"user_id": frappe.session.user})
-	if process == "Mixing":
+def get_open_job_cards(
+	process, line=None, include_wip=True, include_material_transferred=True, include_paused=True
+):
+	is_mixing = process == "Mixing"
+	if is_mixing:
 		filters = {
 			"status": ["in", ["Open", "Material Transferred", "Work In Progress", "Completed"]],
 			"docstatus": [">=", 0],
 			"operation": ["like", "%Mixing%"],
+			"is_finished": ["=", "0"],
 		}
 	else:
 		workstation_names = [x.workstation_name for x in _get_workstations(process)]
@@ -203,9 +219,12 @@ def get_open_job_cards(process, line=None, include_wip=True, include_material_tr
 		if include_wip:
 			in_query.append("Work In Progress")
 
+		if include_paused:
+			in_query.append("On Hold")
+
 		filters = {
 			"status": ["in", in_query],
-			"docstatus": 0,
+			"docstatus": ["=", "0"],
 			"workstation": ws_query,
 		}
 
@@ -215,9 +234,16 @@ def get_open_job_cards(process, line=None, include_wip=True, include_material_tr
 		else:
 			filters["production_line"] = line
 
+	limit = (
+		9999999
+		if not is_mixing
+		or frappe.get_single_value("Mahi Granites Settings", "show_job_card_queue_to_mixer_operators")
+		else 1
+	)
+
 	job_cards = frappe.get_all(
 		"Job Card",
-		# limit=1,
+		limit=limit,
 		filters=filters,
 		fields=[
 			"name",
@@ -226,10 +252,13 @@ def get_open_job_cards(process, line=None, include_wip=True, include_material_tr
 			"production_item",
 			"slab",
 			"slab_template",
+			"workstation",
+			"workstation_type",
 			"started_time",
 			"creation",
+			"modified",
 		],
-		order_by="modified asc",
+		order_by="priority asc, status asc, creation asc",
 		ignore_permissions=True,
 	)
 
@@ -260,10 +289,26 @@ def get_operators(designation, production_line):
 
 
 def _get_slab_template_from_bom(bom_doc):
-	template_components = bom_doc.slab_template.split("-") if bom_doc.slab_template else []
-	size_index = 2 # TODO: This depends on the template's naming structure. Use a reliable way to do it like fetching the slab template and then the size from within it.
-	for index, _ in enumerate(template_components):
-		if index == size_index:
-			template_components[index] = re.sub(r"00", "CM", template_components[index])
-	slab_template = "-".join(template_components)
-	return slab_template
+	# template_components = bom_doc.slab_template.split("-") if bom_doc.slab_template else []
+	# size_index = 2  # TODO: This depends on the template's naming structure. Use a reliable way to do it like fetching the slab template and then the size from within it.
+	# for index, _ in enumerate(template_components):
+	# 	if index == size_index:
+	# 		temp = re.sub(r"0", "00", template_components[index])
+	# 		template_components[index] = re.sub(r"00", "CM", temp)
+	# slab_template = "-".join(template_components)
+	return bom_doc.slab_template
+
+
+def _set_job_card_completion_status(jc_name: str, bom_qty: float, fg_qty: float):
+	jc: JobCard = frappe.get_doc("Job Card", jc_name)  # pyright: ignore
+	prepared_qty = (fg_qty if fg_qty else jc.total_completed_qty) or 0  # pyright: ignore
+
+	display_qty = flt(prepared_qty - bom_qty, 3)
+	bom_qty = flt(bom_qty, 2)
+	is_job_card_finished = display_qty < bom_qty and jc.status == "Completed"
+
+	if is_job_card_finished:
+		jc.is_finished = 1
+		jc.priority = LOW_PRIORITY
+		jc.save(ignore_permissions=True)
+		jc.reload()

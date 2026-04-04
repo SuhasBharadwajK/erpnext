@@ -6,10 +6,11 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "section_break_bop4",
+  "basic_details_section",
   "amended_from",
   "template",
   "line",
+  "child_line",
   "batch_number",
   "number",
   "serial_number",
@@ -18,12 +19,17 @@
   "current_job_card",
   "status",
   "is_cur_stage_complete",
+  "is_paused",
   "is_repressed",
-  "is_prematurely_unquarantined",
+  "is_prematurely_checked_out",
   "quality_section",
   "grade",
   "column_break_e1da",
   "quality_assessment",
+  "shipping_details_section",
+  "crate_number",
+  "column_break_txsf",
+  "container_number",
   "export_section",
   "packing_list_number",
   "column_break_cnky",
@@ -34,10 +40,6 @@
   "slab_history"
  ],
  "fields": [
-  {
-   "fieldname": "section_break_bop4",
-   "fieldtype": "Section Break"
-  },
   {
    "fieldname": "amended_from",
    "fieldtype": "Link",
@@ -64,7 +66,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Distribution\nPressing\nRe-pressing\nHeating\nCooling\nQuarantine\nTrimming\nCalibration\nPolishing\nQuality Check\nPacked\nShipped\nDiscarded",
+   "options": "Distribution\nPressing\nRe-Pressing\nHeating\nCooling\nCuring\nTrimming\nCalibration\nPolishing\nQuality Check\nPacked\nShipped\nDiscarded",
    "read_only": 1,
    "reqd": 1
   },
@@ -189,9 +191,9 @@
   },
   {
    "default": "0",
-   "fieldname": "is_prematurely_unquarantined",
+   "fieldname": "is_prematurely_checked_out",
    "fieldtype": "Check",
-   "label": "Is Prematurely Unquarantined",
+   "label": "Is Prematurely Moved Out of Curing",
    "read_only": 1
   },
   {
@@ -203,16 +205,55 @@
   {
    "fieldname": "column_break_cnky",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "child_line",
+   "fieldtype": "Link",
+   "label": "Mixer Line",
+   "options": "Production Line"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_paused",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Is Paused"
+  },
+  {
+   "fieldname": "basic_details_section",
+   "fieldtype": "Section Break",
+   "label": "Basic Details"
+  },
+  {
+   "fieldname": "shipping_details_section",
+   "fieldtype": "Section Break",
+   "label": "Shipping Details"
+  },
+  {
+   "fieldname": "crate_number",
+   "fieldtype": "Data",
+   "label": "Crate No.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_txsf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "container_number",
+   "fieldtype": "Data",
+   "label": "Container No.",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-10 17:51:40.320473",
+ "modified": "2026-04-02 17:14:32.970051",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Slab",
- "naming_rule": "Expression",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
@@ -253,7 +294,7 @@
   },
   {
    "color": "Cyan",
-   "title": "Re-pressing"
+   "title": "Re-Pressing"
   },
   {
    "color": "Orange",
@@ -265,7 +306,7 @@
   },
   {
    "color": "Blue",
-   "title": "Quarantine"
+   "title": "Curing"
   },
   {
    "color": "Pink",

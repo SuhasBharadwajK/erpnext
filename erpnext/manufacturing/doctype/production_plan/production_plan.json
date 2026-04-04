@@ -13,7 +13,9 @@
   "column_break1",
   "posting_date",
   "monthly_production_plan",
+  "reason_for_deletion_of_job_cards",
   "is_parent_plan",
+  "is_test_item",
   "filters",
   "item_code",
   "customer",
@@ -79,6 +81,7 @@
   "other_details",
   "total_planned_qty",
   "total_produced_qty",
+  "deleted_job_card_count",
   "column_break_32",
   "status",
   "warehouses",
@@ -562,7 +565,7 @@
    "fieldname": "is_parent_plan",
    "fieldtype": "Check",
    "hidden": 1,
-   "label": "is parent plan",
+   "label": "Is parent plan",
    "read_only": 1
   },
   {
@@ -576,13 +579,34 @@
    "label": "Monthly Production Plan",
    "options": "Production Plan",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "This will define the producing item as a test item",
+   "fieldname": "is_test_item",
+   "fieldtype": "Check",
+   "label": "Is Test Item"
+  },
+  {
+   "depends_on": "eval:doc.reason_for_deletion_of_job_cards",
+   "fieldname": "reason_for_deletion_of_job_cards",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Reason for Deletion of Job Cards",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deleted_job_card_count",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Deleted Job Card Count"
   }
  ],
  "icon": "fa fa-calendar",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-02-05 16:33:21.642511",
+ "modified": "2026-04-02 16:21:53.946808",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Production Plan",

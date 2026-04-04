@@ -130,6 +130,13 @@ frappe.ui.form.on("Production Plan", {
 			);
 
 			if (frm.doc.status !== "Completed") {
+				frm.add_custom_button(
+					__("Delete Open Job Cards"),
+					() => {
+						frm.trigger("delete_job_cards");
+					}
+				);
+
 				if (frm.doc.status === "Closed") {
 					frm.add_custom_button(
 						__("Re-open"),
@@ -204,12 +211,16 @@ frappe.ui.form.on("Production Plan", {
 			}
 		}
 
+		if (frm.doc.deleted_job_card_count) {
+			frm.page.wrapper.find(".comment-box").css({ 'display': 'none' });
+		}
+
 		if (frm.doc.status !== "Closed") {
 			frm.page.set_inner_btn_group_as_primary(__("Create"));
 		}
 		frm.trigger("material_requirement");
 
-		// if (frm.doc.is_parent_plan && frm.doc.docstatus == 1) 
+		// if (frm.doc.is_parent_plan && frm.doc.docstatus == 1)
 		// {
 		// 	frm.add_custom_query_report("DPP", {
 		// 		method: "erpnext.manufacturing.doctype.production_plan.production_plan.get_dpp_list",
@@ -331,7 +342,7 @@ frappe.ui.form.on("Production Plan", {
 					100,
 					__("Please wait...")
 				);
-				
+
 				let current_progress = 0;
 				let total_progress = 1;
 
@@ -345,7 +356,7 @@ frappe.ui.form.on("Production Plan", {
 						if (data.increment) {
 							current_progress += data.increment;
 						}
-						
+
 						let percent = (current_progress / total_progress) * 100;
 						if (percent > 100) percent = 100;
 
@@ -711,6 +722,42 @@ frappe.ui.form.on("Production Plan", {
 		}
 		message = title;
 		frm.dashboard.add_progress(__("Status"), bars, message);
+	},
+
+	delete_job_cards(frm) {
+		frappe.prompt(
+			{
+				fieldname: "reason_for_deletion_of_job_cards",
+				label: __("Reason for Deletion"),
+				fieldtype: "Data",
+				reqd: 1,
+			},
+			(values) => {
+				frappe.call({
+					method: "erpnext.manufacturing.doctype.production_plan.api.delete_job_cards",
+					args: {
+						production_plan: frm.doc.name,
+						reason: values.reason_for_deletion_of_job_cards,
+					},
+					callback: function (r) {
+						if (!r.exc) {
+							let count = r.message.deleted_count;
+							let reason = r.message.reason;
+
+							frappe.msgprint(
+								`${count} remaining job card${count > 1 ? 's' : ''} were deleted from this production plan with the reason: "${reason}"`
+							);
+							frm.set_value("reason_for_deletion_of_job_cards", reason);
+							frm.set_value("deleted_job_card_count", count);
+
+							frm.reload_doc();
+						}
+					}
+				});
+			},
+			__("Delete Open Job Cards"),
+			__("Delete")
+		);
 	},
 
 	create_daily_production_plan(frm) {

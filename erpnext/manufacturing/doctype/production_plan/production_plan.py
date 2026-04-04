@@ -42,25 +42,13 @@ class ProductionPlan(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from erpnext.manufacturing.doctype.material_request_plan_item.material_request_plan_item import (
-			MaterialRequestPlanItem,
-		)
+		from erpnext.manufacturing.doctype.material_request_plan_item.material_request_plan_item import MaterialRequestPlanItem
 		from erpnext.manufacturing.doctype.production_plan_item.production_plan_item import ProductionPlanItem
-		from erpnext.manufacturing.doctype.production_plan_item_reference.production_plan_item_reference import (
-			ProductionPlanItemReference,
-		)
-		from erpnext.manufacturing.doctype.production_plan_material_request.production_plan_material_request import (
-			ProductionPlanMaterialRequest,
-		)
-		from erpnext.manufacturing.doctype.production_plan_material_request_warehouse.production_plan_material_request_warehouse import (
-			ProductionPlanMaterialRequestWarehouse,
-		)
-		from erpnext.manufacturing.doctype.production_plan_sales_order.production_plan_sales_order import (
-			ProductionPlanSalesOrder,
-		)
-		from erpnext.manufacturing.doctype.production_plan_sub_assembly_item.production_plan_sub_assembly_item import (
-			ProductionPlanSubAssemblyItem,
-		)
+		from erpnext.manufacturing.doctype.production_plan_item_reference.production_plan_item_reference import ProductionPlanItemReference
+		from erpnext.manufacturing.doctype.production_plan_material_request.production_plan_material_request import ProductionPlanMaterialRequest
+		from erpnext.manufacturing.doctype.production_plan_material_request_warehouse.production_plan_material_request_warehouse import ProductionPlanMaterialRequestWarehouse
+		from erpnext.manufacturing.doctype.production_plan_sales_order.production_plan_sales_order import ProductionPlanSalesOrder
+		from erpnext.manufacturing.doctype.production_plan_sub_assembly_item.production_plan_sub_assembly_item import ProductionPlanSubAssemblyItem
 		from frappe.types import DF
 
 		amended_from: DF.Link | None
@@ -73,6 +61,7 @@ class ProductionPlan(Document):
 		company: DF.Link
 		consider_minimum_order_qty: DF.Check
 		customer: DF.Link | None
+		deleted_job_card_count: DF.Int
 		for_warehouse: DF.Link | None
 		from_date: DF.Date | None
 		from_delivery_date: DF.Date | None
@@ -83,6 +72,7 @@ class ProductionPlan(Document):
 		include_subcontracted_items: DF.Check
 		is_monthly_production_plan: DF.Check
 		is_parent_plan: DF.Check
+		is_test_item: DF.Check
 		item_code: DF.Link | None
 		material_requests: DF.Table[ProductionPlanMaterialRequest]
 		monthly_production_plan: DF.Link | None
@@ -96,20 +86,11 @@ class ProductionPlan(Document):
 		posting_date: DF.Date
 		prod_plan_references: DF.Table[ProductionPlanItemReference]
 		project: DF.Link | None
+		reason_for_deletion_of_job_cards: DF.Data | None
 		sales_order_status: DF.Literal["", "To Deliver and Bill", "To Bill", "To Deliver"]
 		sales_orders: DF.Table[ProductionPlanSalesOrder]
 		skip_available_sub_assembly_item: DF.Check
-		status: DF.Literal[
-			"",
-			"Draft",
-			"Submitted",
-			"Not Started",
-			"In Process",
-			"Completed",
-			"Closed",
-			"Cancelled",
-			"Material Requested",
-		]
+		status: DF.Literal["", "Draft", "Submitted", "Not Started", "In Process", "Completed", "Closed", "Cancelled", "Material Requested"]
 		sub_assembly_items: DF.Table[ProductionPlanSubAssemblyItem]
 		sub_assembly_warehouse: DF.Link | None
 		to_date: DF.Date | None
@@ -920,7 +901,6 @@ class ProductionPlan(Document):
 			indicator="green",
 		)
 
-
 	def create_all_work_orders_and_job_cards_for_production_plan(self, user=None):
 		from erpnext.manufacturing.doctype.work_order.work_order import get_default_warehouse
 
@@ -964,6 +944,7 @@ class ProductionPlan(Document):
 				user=user,
 			)
 
+		frappe.publish_realtime("refresh_mixer_station")
 
 	def make_work_order_for_finished_goods(self, wo_list, default_warehouses, items_data=None):
 		if not items_data:
@@ -978,9 +959,7 @@ class ProductionPlan(Document):
 			if work_order:
 				wo_list.append(work_order)
 
-	def make_work_order_for_subassembly_items(
-		self, wo_list, subcontracted_po, default_warehouses
-	):
+	def make_work_order_for_subassembly_items(self, wo_list, subcontracted_po, default_warehouses):
 		for row in self.sub_assembly_items:
 			if row.type_of_manufacturing == "Subcontract":
 				subcontracted_po.setdefault(row.supplier, []).append(row)

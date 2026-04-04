@@ -1,3 +1,4 @@
+from erpnext.manufacturing.doctype.job_card.constants import HIGH_PRIORITY
 import json
 
 import frappe
@@ -6,14 +7,18 @@ from frappe.utils import flt
 
 from erpnext.manufacturing.doctype.bom.bom import BOM
 from erpnext.manufacturing.doctype.job_card.job_card import (
-	make_stock_entry as jc_make_stock_entry,
+	JobCard,
+	make_time_log,
 )
 from erpnext.manufacturing.doctype.job_card.job_card import (
-	make_time_log,
+	make_stock_entry as jc_make_stock_entry,
 )
 from erpnext.manufacturing.doctype.operation.api import _get_slab_template_from_bom, get_open_job_cards
 from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
 from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry as wo_make_stock_entry
+from erpnext.setup.doctype.employee.api import get_current_user_context
+from erpnext.setup.doctype.mahi_granites_settings.mahi_granites_settings import MahiGranitesSettings
+from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
 
 
 @frappe.whitelist()
@@ -29,9 +34,56 @@ def check_distribution_status(production_line):
 
 
 @frappe.whitelist()
+def get_mixer_station_context():
+	user_context = get_current_user_context()
+	mahi_settings: MahiGranitesSettings = frappe.get_doc("Mahi Granites Settings")
+	return {
+		"current_user": user_context,
+		"show_job_card_queue": mahi_settings.show_job_card_queue_to_mixer_operators,
+	}
+
+
+@frappe.whitelist()
+def get_mixing_queue(production_line):
+	"""Return open mixing job cards, filtering Completed cards to only those
+	with sufficient qty to transfer (display_qty >= bom_qty)."""
+	all_cards = get_open_job_cards(
+		process="Mixing",
+		line=production_line,
+		include_wip=True,
+		include_material_transferred=True,
+	)
+
+	result = []
+	for card in all_cards:
+		status = card.get("status")
+		# Non-completed cards are always visible in the queue
+		if status != "Completed":
+			result.append(card)
+			continue
+
+		# For completed cards, check if there is still qty available to transfer
+		try:
+			state = get_mixer_state(card["name"])
+			display_qty = flt(state.get("display_qty", 0), 3)
+			bom_data = get_next_process_bom_qty(frappe.db.get_value("Job Card", card["name"], "work_order"))
+			bom_qty = flt(bom_data.get("bom_qty", 0), 2)
+			if display_qty >= bom_qty and bom_qty > 0:
+				result.append(card)
+		except Exception:
+			# If we can't determine qty, include the card to be safe
+			result.append(card)
+
+	return result
+
+
+@frappe.whitelist()
 def get_mixer_state(job_card):
-	jc = frappe.get_doc("Job Card", job_card)
-	wo = frappe.get_doc("Work Order", jc.work_order) if jc.work_order else None
+	if not job_card:
+		return {}
+
+	jc: JobCard = frappe.get_doc("Job Card", job_card)  # pyright: ignore
+	produced_qty = frappe.get_value("Work Order", jc.work_order, "produced_qty") if jc.work_order else None
 
 	next_bom = get_next_process_bom_qty(jc.work_order)
 	next_wo = next_bom.get("next_work_order")
@@ -51,13 +103,15 @@ def get_mixer_state(job_card):
 				AND sle.is_cancelled = 0
 			""",
 				(next_wo, jc.production_item),
-			)[0][0]
+			)[0][0]  # pyright: ignore
 			or 0,
 			3,
 		)
 
-	prepared_qty = wo.produced_qty if wo else jc.total_completed_qty
+	prepared_qty = (produced_qty if produced_qty else jc.total_completed_qty) or 0  # pyright: ignore
+
 	display_qty = flt(prepared_qty - transferred_qty_to_next, 3)
+	bom_qty = flt(next_bom.get("bom_qty", 0), 2)
 
 	return {
 		"status": jc.status,
@@ -69,13 +123,12 @@ def get_mixer_state(job_card):
 		"job_card_submitted": jc.status == "Completed",
 		"job_card_completed": jc.total_completed_qty > 0,
 		"prepared_qty": prepared_qty,
-		"stock_entry_name": wo.produced_qty > 0 and "MFG-SE-*" or "",
-		"work_order_status": wo.get_status() if wo else "Draft",
 		"additional_ingredients_added": jc.additional_ingredients_added,
 		"mixer_number": jc.mixer_number,
 		"transferred_qty_to_next": transferred_qty_to_next,
 		"display_qty": display_qty,
 		"transfer_complete": display_qty <= 0.001,
+		"bom_qty": bom_qty,
 	}
 
 
@@ -113,54 +166,96 @@ def get_mixer_ingredients(job_card):
 
 
 @frappe.whitelist()
-def confirm_materials(job_card, ingredients, bom_uom):
+def confirm_and_start_mixing(job_card, ingredients, bom_uom):
 	"""Create Stock Entry from mixer quantities and mark Job Card ready."""
-	ingredients = json.loads(ingredients)
-	jc = frappe.get_doc("Job Card", job_card)
+	try:
+		frappe.db.begin()
+		ingredients = json.loads(ingredients)
+		jc = frappe.get_doc("Job Card", job_card)
 
-	qty_by_code = {ing["item_code"]: flt(ing["qty"]) for ing in ingredients}
+		qty_by_code = {ing["item_code"]: flt(ing["qty"]) for ing in ingredients}
 
-	for row in jc.items:
-		if row.item_code in qty_by_code:
-			row.required_qty = qty_by_code[row.item_code]
-			# row.additional_ingredients_added = added_by_code.get(row.item_code, 0)
+		for row in jc.items:
+			if row.item_code in qty_by_code:
+				row.required_qty = qty_by_code[row.item_code]
+				# row.additional_ingredients_added = added_by_code.get(row.item_code, 0)
 
-	total_qty = 1
-	if jc.for_quantity != 1 and bom_uom != "Nos":
-		total_qty = sum(row.required_qty for row in jc.items if row.required_qty > 0)
-		jc.for_quantity = total_qty
-		jc.additional_ingredients_added = 1
-		jc.save(ignore_permissions=True)
+		total_qty = 1
+		if jc.for_quantity != 1 and bom_uom != "Nos":
+			total_qty = sum(row.required_qty for row in jc.items if row.required_qty > 0)
+			jc.for_quantity = total_qty
+			jc.additional_ingredients_added = 1
+			jc.save(ignore_permissions=True)
 
-	se = jc_make_stock_entry(job_card)
-	if not se.items:
-		frappe.throw(_("No remaining quantity to transfer for Job Card {0}.").format(job_card))
+		se = jc_make_stock_entry(job_card)
+		if not se.items:
+			frappe.throw(_("No remaining quantity to transfer for Job Card {0}.").format(job_card))
 
-	se.insert()
-	se.submit()
-	return {
-		"stock_entry": se.name,
-		"total_for_quantity": total_qty,
-		"additional_ingredients_added": jc.additional_ingredients_added,
-	}
+		se.insert()
+		se.submit()
+
+		start_mixing(job_card)
+		frappe.db.commit()
+		return {
+			"stock_entry": se.name,
+			"total_for_quantity": total_qty,
+			"additional_ingredients_added": jc.additional_ingredients_added,
+			"status": jc.status,
+			"mixer_started": jc.job_started,
+			"mixer_start_time": jc.started_time,
+			"current_time": jc.current_time,
+		}
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.throw(f"Failed to confirm and start mixing: {e}")
 
 
-@frappe.whitelist()
+# def confirm_materials(job_card, ingredients, bom_uom):
+# 	"""Create Stock Entry from mixer quantities and mark Job Card ready."""
+# 	ingredients = json.loads(ingredients)
+# 	jc = frappe.get_doc("Job Card", job_card)
+
+# 	qty_by_code = {ing["item_code"]: flt(ing["qty"]) for ing in ingredients}
+
+# 	for row in jc.items:
+# 		if row.item_code in qty_by_code:
+# 			row.required_qty = qty_by_code[row.item_code]
+# 			# row.additional_ingredients_added = added_by_code.get(row.item_code, 0)
+
+# 	total_qty = 1
+# 	if jc.for_quantity != 1 and bom_uom != "Nos":
+# 		total_qty = sum(row.required_qty for row in jc.items if row.required_qty > 0)
+# 		jc.for_quantity = total_qty
+# 		jc.additional_ingredients_added = 1
+# 		jc.save(ignore_permissions=True)
+
+# 	se = jc_make_stock_entry(job_card)
+# 	if not se.items:
+# 		frappe.throw(_("No remaining quantity to transfer for Job Card {0}.").format(job_card))
+
+# 	se.insert()
+# 	se.submit()
+# 	return {
+# 		"stock_entry": se.name,
+# 		"total_for_quantity": total_qty,
+# 		"additional_ingredients_added": jc.additional_ingredients_added,
+# 	}
+
+
 def start_mixing(job_card):
 	"""Start the Job Card when mixing starts."""
 	jc = frappe.get_doc("Job Card", job_card)
 	start_time = frappe.utils.now_datetime()
-	# employee_id = get_operators("Mixer Operator", jc.production_line)
 	args = {
 		"job_card_id": jc.name,
 		"start_time": start_time,
-		# "employees": [{"employee": employee_id}],
 		"status": "Work In Progress",
 	}
 
 	make_time_log(args)
 	jc.reload()
 	jc.job_started = 1
+	jc.priority = HIGH_PRIORITY
 	jc.save(ignore_permissions=True)
 	return {
 		"status": jc.status,
@@ -261,7 +356,7 @@ def quick_add_raw_materials(job_card, raw_material, qty):
 	jc.flags.ignore_validate = True
 	jc.save(ignore_permissions=True)
 
-	se = frappe.new_doc("Stock Entry")
+	se: StockEntry = frappe.new_doc("Stock Entry")
 	se.job_card = job_card
 	se.work_order = jc.work_order
 	se.purpose = "Material Transfer for Manufacture"
@@ -341,6 +436,7 @@ def get_next_process_bom_qty(mixing_work_order):
 			"production_plan": mixing_wo.production_plan,
 			"docstatus": ["<", 2],
 			"production_item": ["like", f"%{slab_template}%"],
+			"production_line": mixing_wo.production_line,
 		},
 		fields=["name"],
 		ignore_permissions=True,
@@ -367,10 +463,10 @@ def get_next_process_bom_qty(mixing_work_order):
 				"item_name": ["like", f"%{next_process}%"],
 				"docstatus": ["<", 2],
 				"production_item": ["like", f"%{slab_template}%"],
+				"production_line": mixing_wo.production_line,
 			},
 			"name",
 		)
-
 
 	if not next_wo:
 		return {"bom_qty": 0}
@@ -391,12 +487,68 @@ def get_next_process_bom_qty(mixing_work_order):
 
 
 @frappe.whitelist()
-def get_all_mixers(production_line=None):
-	filters = {
-		"production_line": production_line,
-		"workstation_type": "Mixing",
+def get_all_mixers(production_line=None, mixing_queue=None):
+	# Check if the current user has the role of Administrator
+	user_roles = frappe.get_roles()
+	is_admin = "Administrator" in user_roles or "Floor Manager" in user_roles
+
+	production_line_names: list[str] = []
+	production_lines = frappe.get_all("Production Line", fields=["name", "is_group", "parent_line"])
+	if is_admin and not production_line:
+		production_line_names = [line.name for line in production_lines if not line.is_group]
+
+	elif production_line:
+		# Get all the production lines
+		parent_line = None
+		for line in production_lines:
+			if line.name == production_line:
+				if line.is_group:
+					parent_line = line.name
+				else:
+					parent_line = line.parent_line
+
+		production_line_names = [line.name for line in production_lines if line.parent_line == parent_line]
+
+	filters = [
+		["workstation_type", "=", "Mixing"],
+		["production_line", "in", production_line_names if production_line_names else [""]],
+	]
+
+	mixers_list = frappe.get_all(
+		"Workstation", filters=filters, fields=["name", "production_line"], order_by="name asc"
+	)
+
+	active_job_cards = frappe.get_all(
+		"Job Card",
+		filters={
+			"job_started": 1,
+			"status": ("!=", "Completed"),
+			"workstation": ("is", "set"),
+			"workstation_type": "Mixing",
+		},
+		fields=["name", "workstation", "workstation_type"],
+	)
+
+	active_names = {d.workstation: d.name for d in active_job_cards if d.workstation}
+
+	queue_cards = mixing_queue or get_mixing_queue(production_line)
+	finished_names = {
+		card.get("workstation"): card.get("name")
+		for card in queue_cards
+		if card.get("status") == "Completed" and card.get("workstation")
 	}
-	mixers_list = frappe.get_all("Workstation", filters=filters)
+
+	for m in mixers_list:
+		if m.name in finished_names:
+			m.status = "Finished"
+			m.active_job_card = finished_names[m.name]
+		elif m.name in active_names:
+			m.status = "In Progress"
+			m.active_job_card = active_names[m.name]
+		else:
+			m.status = "Idle"
+			m.active_job_card = None
+
 	return mixers_list
 
 
@@ -408,3 +560,26 @@ def assign_mixer_to_job_card(job_card, mixer):
 	frappe.db.commit()
 
 	return {"status": "success", "mixer_number": jc.mixer_number}
+
+
+@frappe.whitelist()
+def get_mixer_polling_data(production_line=None, fetch_queue=0, fetch_status=0, fetch_mixers=0):
+	"""Consolidated endpoint for polling queue, distribution status, and mixers"""
+	result = {}
+
+	fetch_queue_bool = frappe.utils.cint(fetch_queue)
+	fetch_status_bool = frappe.utils.cint(fetch_status)
+	fetch_mixers_bool = frappe.utils.cint(fetch_mixers)
+
+	if fetch_status_bool:
+		result["distribution_status"] = check_distribution_status(production_line)
+
+	mixing_queue = []
+	if fetch_queue_bool:
+		mixing_queue = get_mixing_queue(production_line)
+		result["queue"] = mixing_queue
+
+	if fetch_mixers_bool:
+		result["mixers"] = get_all_mixers(production_line, mixing_queue)
+
+	return result
