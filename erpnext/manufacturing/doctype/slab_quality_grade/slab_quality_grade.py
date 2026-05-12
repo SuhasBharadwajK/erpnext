@@ -14,6 +14,7 @@ class SlabQualityGrade(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		amended_from: DF.Link | None
 		code: DF.Data
 		color: DF.Color
 		grade_name: DF.Data

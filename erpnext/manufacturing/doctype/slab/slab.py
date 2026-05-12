@@ -1,10 +1,10 @@
 # Copyright (c) 2025, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-# import frappe
+import frappe
 from frappe.model.document import Document
 
-ALLOWED_STAGES = ["Distribution", "Pressing", "Re-Pressing", "Heating", "Cooling", "Curing", "Trimming", "Calibration", "Polishing", "Quality Check", "Packed", "Shipped", "Discarded", "Rejected"]
+ALLOWED_STAGES = ["Distribution", "Pressing", "Re-Pressing", "Heating", "Cooling", "Curing", "Trimming", "Calibration", "Polishing", "Quality Check", "Recovery", "Packed", "Shipped", "Discarded", "Rejected"]
 
 class Slab(Document):
 	# begin: auto-generated types
@@ -29,7 +29,11 @@ class Slab(Document):
 		is_cur_stage_complete: DF.Check
 		is_paused: DF.Check
 		is_prematurely_checked_out: DF.Check
+		is_recalibrated: DF.Check
+		is_recovered: DF.Check
+		is_repolished: DF.Check
 		is_repressed: DF.Check
+		is_sample: DF.Check
 		line: DF.Link
 		number: DF.Int
 		packing_date: DF.Date | None
@@ -39,9 +43,10 @@ class Slab(Document):
 		shipment_number: DF.Link | None
 		shipping_date: DF.Date | None
 		slab_history: DF.Table[SlabHistory]
-		status: DF.Literal["Distribution", "Pressing", "Re-Pressing", "Heating", "Cooling", "Curing", "Trimming", "Calibration", "Polishing", "Quality Check", "Packed", "Shipped", "Discarded", "Rejected"]
+		status: DF.Literal["Distribution", "Pressing", "Re-Pressing", "Heating", "Cooling", "Curing", "Trimming", "Calibration", "Polishing", "Quality Check", "Recovery", "Packed", "Shipped", "Discarded", "Rejected"]
 		stock_item: DF.Link | None
 		template: DF.Link
+		updated_template: DF.Link | None
 	# end: auto-generated types
 
 
@@ -56,3 +61,17 @@ class Slab(Document):
 				return history.job_card_number
 
 		return None
+
+	@property
+	def repair_stats(self):
+		from erpnext.manufacturing.doctype.slab_quality_report.slab_quality_report import SlabQualityReport
+
+		qc: SlabQualityReport | None = frappe.get_doc("Slab Quality Report", self.quality_assessment) if self.quality_assessment else None  # pyright: ignore[reportAssignmentType]
+		if not qc:
+			return None
+
+		return {
+			"recovery_count": qc.recovery_count,
+			"repolish_count": qc.repolish_count,
+			"recalibration_count": qc.recalibration_count,
+		}

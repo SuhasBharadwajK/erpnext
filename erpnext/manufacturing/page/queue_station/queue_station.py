@@ -16,12 +16,15 @@ from erpnext.manufacturing.page.operator_station.operator_station import (
 @frappe.whitelist()
 def get_queue_data(line, station_name: str):
 	# Check if the station is standalone
-	is_warehouse_standalone = frappe.db.get_value("Warehouse", {"mfg_process_type": station_name, "production_line": line }, "is_standalone")
+	is_warehouse_standalone = frappe.db.get_value(
+		"Warehouse", {"mfg_process_type": station_name, "production_line": line}, "is_standalone"
+	)
 	# If it is, set the limit to 50, else set it to 1.
 	limit = 50 if is_warehouse_standalone else 1
 
 	# 1. Get Incoming Slabs (Ready for the current station)
 	incoming_slabs = get_slabs_for(line, station_name, limit=limit)
+	incoming_slabs.sort(key=lambda x: (x.get("modified"), x.get("name")))
 
 	# 2. Get the current slab queue (Active Job Cards)
 	# Fetch WIP job cards for the current process.
@@ -37,6 +40,8 @@ def get_queue_data(line, station_name: str):
 		include_material_transferred=False,  # Explicitly exclude
 	)
 
+	slabs_queue.sort(key=lambda x: (x.get("started_time") or x.get("creation"), x.get("name")))
+
 	return {"incoming_slabs": incoming_slabs, "slabs_queue": slabs_queue}
 
 
@@ -45,7 +50,9 @@ def start_queue_process(slab_number: str, line: str, station_name: str):
 	slab = cast(Slab, frappe.get_doc("Slab", slab_number))
 	#    1. Get the job card for the current station on the given line.
 	child_lines = get_all_child_lines(line)
-	job_card_result: dict[str, JobCard] = get_top_job_card_for_process(station_name, child_lines if child_lines else line, False)
+	job_card_result: dict[str, JobCard] = get_top_job_card_for_process(
+		station_name, child_lines if child_lines else line, False, item_code=slab.template
+	)
 	job_card = job_card_result.get("top_job_card")
 	if not job_card:
 		frappe.throw("No Job Card found")

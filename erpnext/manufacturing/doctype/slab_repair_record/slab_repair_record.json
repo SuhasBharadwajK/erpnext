@@ -1,0 +1,266 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-30 12:14:03.947584",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "dimensions_section",
+  "colour",
+  "colour_indicator",
+  "slab_thickness",
+  "column_break_apce",
+  "job_card",
+  "repair_req_date",
+  "repaired_date",
+  "repair_section",
+  "repair",
+  "column_break_bmec",
+  "repair_reason",
+  "column_break_rtvd",
+  "remarks",
+  "quality_measurements_section",
+  "filler_spot",
+  "column_break_zrxg",
+  "contamination",
+  "paper_deep_section",
+  "paper_deep_front",
+  "column_break_uuha",
+  "paper_deep_back",
+  "crack_section",
+  "crack_front",
+  "column_break_ksjd",
+  "crack_back",
+  "rework_section",
+  "pinholes",
+  "column_break_glsf",
+  "is_contamination",
+  "column_break_wntr",
+  "film_contamination",
+  "column_break_uyer",
+  "porasity",
+  "column_break_yvay",
+  "epoxy_applied"
+ ],
+ "fields": [
+  {
+   "fieldname": "colour",
+   "fieldtype": "Color",
+   "hidden": 1,
+   "in_list_view": 1,
+   "label": "Colour",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Dimensions"
+  },
+  {
+   "fieldname": "slab_thickness",
+   "fieldtype": "Float",
+   "label": "Thickness (mm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quality_measurements_section",
+   "fieldtype": "Section Break",
+   "label": "Quality Measurements"
+  },
+  {
+   "fieldname": "filler_spot",
+   "fieldtype": "Data",
+   "label": "Filler Spot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_zrxg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "contamination",
+   "fieldtype": "Data",
+   "label": "Contamination",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paper_deep_section",
+   "fieldtype": "Section Break",
+   "label": "Paper Deep"
+  },
+  {
+   "fieldname": "paper_deep_front",
+   "fieldtype": "Data",
+   "label": "Front",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_uuha",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "paper_deep_back",
+   "fieldtype": "Data",
+   "label": "Back",
+   "read_only": 1
+  },
+  {
+   "fieldname": "crack_section",
+   "fieldtype": "Section Break",
+   "label": "Crack"
+  },
+  {
+   "fieldname": "crack_front",
+   "fieldtype": "Data",
+   "label": "Front"
+  },
+  {
+   "fieldname": "column_break_ksjd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "crack_back",
+   "fieldtype": "Data",
+   "label": "Back"
+  },
+  {
+   "fieldname": "repair_section",
+   "fieldtype": "Section Break",
+   "label": "Repair"
+  },
+  {
+   "fieldname": "column_break_bmec",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_rtvd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Remarks",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_apce",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "job_card",
+   "fieldtype": "Link",
+   "label": "Job Card",
+   "options": "Job Card",
+   "read_only": 1
+  },
+  {
+   "fieldname": "repair",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Repair Type",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "colour_indicator",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Colour",
+   "print_width": "1",
+   "read_only": 1,
+   "width": "1"
+  },
+  {
+   "fieldname": "repair_reason",
+   "fieldtype": "Data",
+   "label": "Repair Description",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "repair_req_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Repair Request Date",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "repaired_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Repaired Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rework_section",
+   "fieldtype": "Section Break",
+   "label": "Re-work"
+  },
+  {
+   "default": "0",
+   "fieldname": "pinholes",
+   "fieldtype": "Check",
+   "label": "Pinholes"
+  },
+  {
+   "fieldname": "column_break_glsf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_contamination",
+   "fieldtype": "Check",
+   "label": "Contamination"
+  },
+  {
+   "fieldname": "column_break_wntr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "film_contamination",
+   "fieldtype": "Check",
+   "label": "Film Contamination"
+  },
+  {
+   "fieldname": "column_break_uyer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "porasity",
+   "fieldtype": "Check",
+   "label": "Porasity"
+  },
+  {
+   "fieldname": "column_break_yvay",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "epoxy_applied",
+   "fieldtype": "Check",
+   "label": "Is Epoxy Applied"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-05-04 20:16:14.868567",
+ "modified_by": "Administrator",
+ "module": "Manufacturing",
+ "name": "Slab Repair Record",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

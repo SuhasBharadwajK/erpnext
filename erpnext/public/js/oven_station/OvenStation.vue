@@ -331,7 +331,6 @@ const ovenOperation = ref({});
 
 function prepareOvenOperation() {
     if (!ovenData.value || !selectedSlab.value || !targetRack.value) return;
-
     ovenOperation.value = {
         doctype: 'Oven Operation',
         oven: ovenData.value.name,
@@ -523,7 +522,8 @@ frappe.realtime.on('slab_checkout', async (slab) => {
             </div>
 
             <div class="d-flex justify-content-end pt-4">
-                <button class="btn btn-secondary mr-2" :disabled="isProcessing" @click="closeModal">{{ __('Cancel') }}</button>
+                <button class="btn btn-secondary mr-2" :disabled="isProcessing" @click="closeModal">{{ __('Cancel')
+                }}</button>
                 <button class="btn btn-primary" :disabled="isProcessing" @click="confirmLoad">
                     <span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
                     {{ __('Load Slab') }}
@@ -556,7 +556,8 @@ frappe.realtime.on('slab_checkout', async (slab) => {
             </div>
 
             <div class="d-flex justify-content-end">
-                <button class="btn btn-secondary mr-2" :disabled="isProcessing" @click="showUnloadModal = false">{{ __('Cancel') }}</button>
+                <button class="btn btn-secondary mr-2" :disabled="isProcessing" @click="showUnloadModal = false">{{
+                    __('Cancel') }}</button>
                 <button class="btn btn-primary" :disabled="isProcessing" @click="confirmUnload">
                     <span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
                     {{ __('Confirm Unload') }}
@@ -804,6 +805,6 @@ frappe.realtime.on('slab_checkout', async (slab) => {
 }
 
 .exclamation-icon {
-	line-height: 0 !important;
+    line-height: 0 !important;
 }
 </style>

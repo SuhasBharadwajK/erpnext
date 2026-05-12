@@ -1,7 +1,8 @@
 frappe.ui.form.on("Slab Quality Report", {
-    refresh(frm) {
+	refresh(frm) {
         frm.trigger('render_visualizer');
         frm.trigger('render_grade_color');
+        frm.trigger('render_repair_history_indicators');
     },
 
     grade(frm) {
@@ -37,24 +38,35 @@ frappe.ui.form.on("Slab Quality Report", {
             // CSS Variables for styling
             const borderColor = 'var(--text-color)';
             const bgColor = 'var(--fg-color)';
-            const markerColor = '#dc3545';
 
-            let markers_html = obs_data.map(obs => {
+			let markers_html = obs_data.map(obs => {
                 const left_pct = (obs.x / length) * 100;
                 const top_pct = (obs.y / breadth) * 100;
 
                 // Marker
-                return `<div class="obs-marker" style="
+				return `
+                <div class="obs-marker" style="
                     position: absolute;
                     left: ${left_pct}%;
                     top: ${top_pct}%;
                     width: 0;
                     height: 0;
                 " title="${obs.x} mm from left & ${obs.y} mm from top">
+	                <div class="text-success fixed-marker" style="
+						position: absolute;
+						top: -25px;
+						left: calc(50% + 1px);
+						transform: translateX(-50%);
+						font-size: 14px;
+						text-shadow: 0 0 2px var(--card-bg);
+						display: ${obs.is_fixed ? 'block' : 'none'}
+                        ">
+                        <span class="fa fa-check font-weight-bold"></span>
+                    </div>
                     <div style="
                         width: 12px;
                         height: 12px;
-                        background: ${markerColor};
+                        background: ${obs.colour};
                         border: 2px solid white;
                         border-radius: 50%;
                         transform: translate(-50%, -50%);
@@ -133,5 +145,39 @@ frappe.ui.form.on("Slab Quality Report", {
                 }
             }
         });
+    },
+
+    render_repair_history_indicators(frm) {
+        if (!frm.fields_dict.repair_history) return;
+
+        const grid = frm.fields_dict.repair_history.grid;
+        grid.wrapper.find('.grid-row').each(function() {
+            const $row = $(this);
+            const docname = $row.attr('data-name');
+            const row = grid.get_row(docname);
+
+            if (row && row.doc && row.doc.colour) {
+                const $indicator_wrapper = $row.find('.grid-static-col[data-fieldname="colour_indicator"]');
+                if ($indicator_wrapper.length) {
+                    $indicator_wrapper.empty();
+                    $(`
+                        <div style="
+                            width: 12px;
+                            height: 12px;
+                            border-radius: 50%;
+                            background-color: ${row.doc.colour};
+                            border: 1px solid var(--border-color);
+                            margin: 0 auto;
+                        "></div>
+                    `).appendTo($indicator_wrapper);
+                }
+            }
+        });
+    }
+});
+
+frappe.ui.form.on("Slab Repair Record", {
+    repair_history_on_render(frm) {
+        frm.trigger('render_repair_history_indicators');
     }
 });

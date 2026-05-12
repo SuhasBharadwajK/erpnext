@@ -43,7 +43,17 @@ from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
 
 
 @frappe.whitelist()
-def start_process(job_card, slab_name="", slab_template="", process_name="operator", slab_number=0, slab_batch_number="", should_start_machine=True, publish_slab_event=True):
+def start_process(
+	job_card,
+	slab_name="",
+	slab_template="",
+	process_name="operator",
+	slab_number=0,
+	slab_batch_number="",
+	should_start_machine=True,
+	publish_slab_event=True,
+	skip_stage_validation=False,
+):
 	"""Start the Job Card when mixing starts."""
 
 	jc: JobCard = frappe.get_doc("Job Card", job_card)  # pyright: ignore[reportAssignmentType]
@@ -65,6 +75,7 @@ def start_process(job_card, slab_name="", slab_template="", process_name="operat
 			next_stage=process_name.lower(),
 			job_card_number=jc.name,
 			publish_event=publish_slab_event,
+			skip_stage_validation=skip_stage_validation,
 		)
 
 	else:
@@ -80,7 +91,15 @@ def start_process(job_card, slab_name="", slab_template="", process_name="operat
 			child_line = jc.production_line
 
 		slab_history = _get_mixing_slab_history(jc.name or "")
-		new_slab = create_slab(parent_line or "", child_line or "", slab_template or "", jc.name, slab_history, slab_number, slab_batch_number)
+		new_slab = create_slab(
+			parent_line or "",
+			child_line or "",
+			slab_template or "",
+			jc.name,
+			slab_history,
+			slab_number,
+			slab_batch_number,
+		)
 		slab_name = new_slab.name
 		slab_template = new_slab.template
 
@@ -162,6 +181,7 @@ def finish_process(
 	slab_number=None,
 	slab_grade=None,
 	publish_slab_event=True,
+	complete_work_order=True,
 ):
 	"""Complete the Job Card when mixing is finished."""
 
@@ -212,6 +232,7 @@ def finish_process(
 	if fg_item:
 		fg_item.qty = job_card_qty
 
+	# TODO: Move this to a function whose sole responsibility is to set slab details on the stock entry.
 	if process_name == "Quality Check":
 		stock_entry_manufacture.slab_grade = slab_grade
 		stock_entry_manufacture.slab_serial_no = slab_number.split("-")[-1] if slab_number else ""
@@ -219,8 +240,10 @@ def finish_process(
 
 		for item in stock_entry_manufacture.items:
 			if item.is_finished_item:
-				item.slab_no = slab_number
-				item.to_slab_no = slab_number
+				item.slab_no = slab_number  # pyright: ignore[reportAttributeAccessIssue]
+				item.to_slab_no = slab_number  # pyright: ignore[reportAttributeAccessIssue]
+				item.slab_quality_grade = slab_grade
+				item.to_slab_grade = slab_grade
 
 	stock_entry_manufacture.fg_completed_qty = job_card_qty
 	stock_entry_manufacture.save()
@@ -353,10 +376,10 @@ def set_machine_status(status: str, station: str, line_name: str | None, machine
 	machine.reload()
 
 
-def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip=True):
+def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip=True, item_code=None):
 	child_lines = get_all_child_lines(line_name) or []
 	job_card_data = get_top_job_card_for_process(
-		process, child_lines if child_lines else line_name, include_wip
+		process, child_lines if child_lines else line_name, include_wip, item_code=item_code
 	)
 	return job_card_data
 
@@ -388,13 +411,17 @@ def get_next_work_item(process, line="", include_wip=True):
 	}
 
 
-def get_top_job_card_for_process(process, line: str | list = "", include_wip=True, include_paused=True):
+def get_top_job_card_for_process(
+	process, line: str | list = "", include_wip=True, include_paused=True, item_code=None
+):
 	if line and not isinstance(line, list):
 		child_lines = get_all_child_lines(line)
 		if child_lines:
 			line = child_lines
 
-	job_cards = get_open_job_cards(process, line, include_wip, include_paused=include_paused)
+	job_cards = get_open_job_cards(
+		process, line, include_wip, include_paused=include_paused, item_code=item_code
+	)
 	return {
 		"top_job_card": job_cards[0] if job_cards else None,
 		"available_job_cards_count": len(job_cards),
@@ -411,16 +438,23 @@ def update_slab_number_on_job_card(job_card_name, slab_name, slab_template):
 
 
 @frappe.whitelist()
-def get_job_card_for_slab(slab_name: str, process_name: str):
+def get_job_card_for_slab(slab_name: str, process_name: str, item_code):
 	slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
-	job_card_data = _get_job_card_for_line_and_process(slab.line, process_name, include_wip=True)
+	job_card_data = _get_job_card_for_line_and_process(
+		slab.line, process_name, include_wip=True, item_code=item_code
+	)
 	job_card = job_card_data["top_job_card"]
 	return job_card
 
 
 def _get_mixing_slab_history(job_card_name: str):
 	# 1. Get the ID of the Mixing Job Card that transferred the material to this distribution using the current job card's stock entry.
-	stock_entry = frappe.get_all("Stock Entry", filters={"job_card": job_card_name}, limit=1, fields=["name", "job_card", "previous_job_card"])
+	stock_entry = frappe.get_all(
+		"Stock Entry",
+		filters={"job_card": job_card_name},
+		limit=1,
+		fields=["name", "job_card", "previous_job_card"],
+	)
 	if stock_entry:
 		stock_entry = stock_entry[0]
 	else:
@@ -435,7 +469,12 @@ def _get_mixing_slab_history(job_card_name: str):
 	# 3. Append the time logs to the slab.
 	time_logs = []
 	if mixing_job_card:
-		time_logs = frappe.get_all("Job Card Time Log", filters={"parent": mixing_job_card.name}, fields=["from_time", "to_time", "time_in_mins"], order_by="idx asc")
+		time_logs = frappe.get_all(
+			"Job Card Time Log",
+			filters={"parent": mixing_job_card.name},
+			fields=["from_time", "to_time", "time_in_mins"],
+			order_by="idx asc",
+		)
 
 	slab_history = []
 	if time_logs:
