@@ -88,6 +88,9 @@ def finish_queue_process(job_card: str, process_name: str, transfer_materials: b
 		if next_job_card_name:
 			se = make_stock_entry(next_job_card_name)
 			se.submit()
+	return {
+		"stock_entry": se.name,
+	}
 
 
 def _get_next_corrective_job_card(job_card: str, process_name: str):
