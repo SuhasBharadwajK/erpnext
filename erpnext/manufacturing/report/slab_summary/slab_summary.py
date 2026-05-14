@@ -73,6 +73,7 @@ def get_data(filters):
 		WHERE pp.docstatus = 1
 			AND pp.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			AND {ppi_conditions}
+			AND is_monthly_production_plan = 0
 		GROUP BY ppi.item_code
 	""",
 		filters,
@@ -86,8 +87,7 @@ def get_data(filters):
 			SUM(sle.actual_qty * sle.valuation_rate) as cost_of_production,
 			sle.valuation_rate as valuation_rate
 		FROM `tabStock Ledger Entry` sle
-		WHERE sle.warehouse LIKE '%%Finished Goods Warehouse%%'
-			AND sle.actual_qty > 0
+		WHERE sle.warehouse LIKE '%%Finished Goods - U2%%'
 			AND sle.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			AND {sle_conditions}
 		GROUP BY sle.item_code
