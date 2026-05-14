@@ -12,7 +12,7 @@ def get_total_no_of_slabs_daily():
 		SELECT COUNT(*)
 		FROM `tabStock Ledger Entry`
 		WHERE DATE(creation) = %s AND
-		warehouse LIKE '%%finished goods Warehouse%%'
+		warehouse LIKE '%%finished goods - U2%%'
 		AND actual_qty > 0
 	""",
 		(today,),
@@ -28,7 +28,7 @@ def get_total_cost_slab_daily():
 		SELECT SUM(valuation_rate)
 		FROM `tabStock Ledger Entry`
 		WHERE DATE(creation) = %s AND
-		warehouse LIKE '%%finished goods Warehouse%%'
+		warehouse LIKE '%%finished goods - U2%%'
 		AND actual_qty > 0
 	""",
 		(today,),
@@ -48,7 +48,7 @@ def get_daily_finished_goods_item_code_summary():
         SELECT item_code, COUNT(*) AS cnt
         FROM `tabStock Ledger Entry`
         WHERE DATE(creation) = %s
-		AND warehouse LIKE '%%finished goods Warehouse%%'
+		AND warehouse LIKE '%%finished goods - U2%%'
         AND actual_qty > 0
         GROUP BY item_code
         ORDER BY cnt DESC, item_code ASC
@@ -88,7 +88,7 @@ def get_total_no_of_slabs_weekly():
 		SELECT COUNT(*)
 		FROM `tabStock Ledger Entry`
 		WHERE DATE(creation) BETWEEN %s AND %s AND
-		warehouse LIKE '%%finished goods Warehouse%%'
+		warehouse LIKE '%%finished goods - U2%%'
 		AND actual_qty > 0
 	""",
 		(start_date, end_date),
@@ -107,7 +107,7 @@ def get_total_cost_slab_weekly():
 		SELECT SUM(valuation_rate)
 		FROM `tabStock Ledger Entry`
 		WHERE DATE(creation) BETWEEN %s AND %s
-		AND warehouse LIKE '%%finished goods Warehouse%%'
+		AND warehouse LIKE '%%finished goods - U2%%'
 		AND actual_qty > 0
 	""",
 		(start_date, end_date),
@@ -128,7 +128,7 @@ def get_weekly_finished_goods_item_code_summary():
         SELECT item_code, COUNT(*) AS cnt
         FROM `tabStock Ledger Entry`
         WHERE DATE(creation) BETWEEN %s AND %s
-		AND warehouse LIKE '%%finished goods Warehouse%%'
+		AND warehouse LIKE '%%finished goods - U2%%'
         AND actual_qty > 0
         GROUP BY item_code
         ORDER BY cnt DESC, item_code ASC
@@ -170,7 +170,7 @@ def get_total_no_of_slabs_monthly():
 		SELECT COUNT(*)
 		FROM `tabStock Ledger Entry`
 		WHERE DATE(creation) BETWEEN %s AND %s AND
-		warehouse LIKE '%%finished goods Warehouse%%'
+		warehouse LIKE '%%finished goods - U2%%'
 		AND actual_qty > 0
 	""",
 		(start_date, end_date),
@@ -189,7 +189,7 @@ def get_total_cost_slab_monthly():
 		SELECT SUM(valuation_rate)
 		FROM `tabStock Ledger Entry`
 		WHERE DATE(creation) BETWEEN %s AND %s
-		AND warehouse LIKE '%%finished goods Warehouse%%'
+		AND warehouse LIKE '%%finished goods - U2%%'
 		AND actual_qty > 0
 	""",
 		(start_date, end_date),
@@ -209,7 +209,7 @@ def get_finished_goods_item_code_summary():
 		"""
         SELECT item_code, COUNT(*) AS cnt
         FROM `tabStock Ledger Entry`
-        WHERE warehouse LIKE '%%finished goods Warehouse%%'
+        WHERE warehouse LIKE '%%finished goods - U2%%'
           AND actual_qty > 0
           AND DATE(creation) BETWEEN %s AND %s
         GROUP BY item_code
