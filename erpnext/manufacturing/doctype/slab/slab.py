@@ -43,7 +43,7 @@ class Slab(Document):
 		shipment_number: DF.Link | None
 		shipping_date: DF.Date | None
 		slab_history: DF.Table[SlabHistory]
-		status: DF.Literal["Distribution", "Pressing", "Re-Pressing", "Heating", "Cooling", "Curing", "Trimming", "Calibration", "Polishing", "Quality Check", "Recovery", "Packed", "Shipped", "Discarded", "Rejected"]
+		status: DF.Literal["Distribution", "Pressing", "Re-Pressing", "Heating", "Cooling", "Curing", "Trimming", "Calibration", "Polishing", "Quality Check", "Recovery", "Packed", "Shipped", "Delivered", "Discarded", "Rejected"]
 		stock_item: DF.Link | None
 		template: DF.Link
 		updated_template: DF.Link | None
