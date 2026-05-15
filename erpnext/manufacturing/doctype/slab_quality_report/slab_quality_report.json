@@ -348,8 +348,9 @@
             "options": "Slab Repair Record"
         },
         {
+            "allow_on_submit": 1,
             "default": "0",
-            "depends_on": "eval: doc.grade && doc.grade.toLowerCase() === 'rej'",
+            "depends_on": "eval: doc.use_for_samples",
             "fieldname": "use_for_samples",
             "fieldtype": "Check",
             "label": "Use for samples"
@@ -359,7 +360,7 @@
     "index_web_pages_for_search": 1,
     "is_submittable": 1,
     "links": [],
-    "modified": "2026-05-03 22:48:51.305305",
+    "modified": "2026-05-14 15:11:48.546178",
     "modified_by": "Administrator",
     "module": "Manufacturing",
     "name": "Slab Quality Report",
