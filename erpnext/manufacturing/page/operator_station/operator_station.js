@@ -1,18 +1,21 @@
 frappe.pages['operator-station'].on_page_load = function (wrapper) {
     let route = frappe.get_route?.() || {};
     console.log(route);
-    let station = route[1] || 'operator'
-    let job_card = route[2] || null;
+    let station = route[1] || null
+	let job_card = route[2] || null;
+
     const station_map = {
         'distribution': { title: 'Distribution Station', process: 'distribution' },
         'pressing': { title: 'Pressing Station', process: 'pressing' },
         'trimming': { title: 'Trimming Station', process: 'trimming' },
-        // 'polishing': { title: 'Polishing Station', process: 'polishing' },
-        // 'calibration': { title: 'Calibration Station', process: 'calibration' },
-        'operator': { title: 'Operator Station', process: 'operator' }
     }
 
-    let config = station_map[station.toLowerCase()] || station_map['operator']
+	let config = station && station_map[station.toLowerCase()] || null
+
+	if (!station || !config) {
+		window.location.href = '/app';
+	}
+
     let page = frappe.ui.make_app_page({
         parent: wrapper,
         title: config.title,
