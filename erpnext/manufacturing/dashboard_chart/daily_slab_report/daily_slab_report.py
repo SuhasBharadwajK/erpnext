@@ -10,7 +10,8 @@ def get_daily_slab_report_data():
         SELECT COUNT(*)
         FROM `tabStock Ledger Entry`
         WHERE DATE(creation) = %s AND
-        warehouse LIKE '%%finished goods Warehouse%%'
+        warehouse LIKE '%%finished goods - U2%%'
+		AND slab_quality_grade != ''
 		AND actual_qty > 0
     """,
 		(frappe_utils.today(),),
@@ -21,7 +22,8 @@ def get_daily_slab_report_data():
         SELECT SUM(valuation_rate)
         FROM `tabStock Ledger Entry`
         WHERE DATE(creation) = %s AND
-        warehouse LIKE '%%finished goods Warehouse%%'
+        warehouse LIKE '%%finished goods - U2%%'
+		AND slab_quality_grade != ''
 		AND actual_qty > 0
     """,
 		(frappe_utils.today(),),
