@@ -960,6 +960,7 @@ class ProductionPlan(Document):
 			self.make_work_order_for_finished_goods(wo_list, default_warehouses, items_data)
 			self.make_work_order_for_subassembly_items(wo_list, subcontracted_po, default_warehouses)
 			self.make_subcontracted_purchase_order(subcontracted_po, po_list)
+			self.db_set("is_work_order_created", 1)
 		except Exception:
 			frappe.log_error(title="Error while creating work orders", message=frappe.get_traceback())
 

@@ -172,8 +172,8 @@ frappe.ui.form.on("Production Plan", {
 							frm.add_custom_button(
 								__("Work Order / Subcontract PO"),
 								async () => {
-									await frm.set_value("is_work_order_created", 1);
-									await frm.save("Update");
+									// await frm.set_value("is_work_order_created", 1);
+									// await frm.save("Update");
 									frm.trigger("make_work_order");
 								},
 								__("Create")
@@ -372,6 +372,9 @@ frappe.ui.form.on("Production Plan", {
 						);
 
 						if (data.reload) {
+							// frm.set_value("is_work_order_created", 1);
+							// frm.save("Update");
+							// frm.refresh();
 							frappe.show_progress(
 								work_order_message,
 								100,
