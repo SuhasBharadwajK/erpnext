@@ -20,6 +20,8 @@
   "show_job_card_queue_to_mixer_operators",
   "oven_section",
   "max_heating_minutes",
+  "cooling_section",
+  "bypass_cooling",
   "curing_section",
   "min_curing_hours",
   "curing_labels",
@@ -178,13 +180,25 @@
    "fieldtype": "Int",
    "label": "Sales Allowance (in mm)",
    "reqd": 1
+  },
+  {
+   "fieldname": "cooling_section",
+   "fieldtype": "Section Break",
+   "label": "Cooling"
+  },
+  {
+   "default": "0",
+   "description": "Bypass cooling and move the slab directly to curing",
+   "fieldname": "bypass_cooling",
+   "fieldtype": "Check",
+   "label": "Bypass Cooling"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-22 22:18:26.120663",
+ "modified": "2026-06-04 13:30:26.533506",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Mahi Granites Settings",

@@ -33,9 +33,9 @@ def load_slab_into_oven(oven_op: str, line: str, job_card_name: str, slab_templa
 	new_oven_operation: OvenOperation = frappe.new_doc("Oven Operation")  # pyright: ignore[reportAssignmentType]
 	new_oven_operation.update(oven_operation)
 
-	rack_name = new_oven_operation.oven_rack
-	slab_name = new_oven_operation.slab
-	oven_rack: OvenRack = frappe.get_doc("Oven Rack", rack_name)
+	rack_name = new_oven_operation.oven_rack or ""
+	slab_name = new_oven_operation.slab or ""
+	oven_rack: OvenRack = frappe.get_doc("Oven Rack", rack_name)  # pyright: ignore[reportAssignmentType]
 
 	job_card_data = _get_oven_job_card_(line, include_wip=False, item_code=slab_template)
 
@@ -136,6 +136,8 @@ def unload_slab_from_oven(rack_name: str, slab_name: str, slab_template: str, va
 			if not is_in_use:
 				stop_machine("Heating", oven.line, None)
 
+			_move_slab_to_cooling_if_enabled(slab_name)
+
 		frappe.db.commit()
 
 	except Exception:
@@ -147,7 +149,18 @@ def unload_slab_from_oven(rack_name: str, slab_name: str, slab_template: str, va
 
 def _get_oven_job_card_(line: str, include_wip=True, item_code=None):
 	child_lines = get_all_child_lines(line)
-	jc_data: JobCard = get_top_job_card_for_process(
+	jc_data: dict = get_top_job_card_for_process(
 		"Heating", child_lines if child_lines else line, include_wip=include_wip, item_code=item_code
 	)
+
 	return jc_data["top_job_card"]
+
+
+def _move_slab_to_cooling_if_enabled(slab_name: str):
+	# Check if bypass cooling is enabled in Mahi Granites Settings and return if it is not.
+	if not frappe.db.get_single_value("Mahi Granites Settings", "bypass_cooling"):
+		return
+
+	method_path = "spl_mods.manufacturing_enhancements.overrides.slab.api.move_slab_iteratively_to"
+	method = frappe.get_attr(method_path)
+	method(slab_name, "Cooling", use_txn=False, publish_event=True)
