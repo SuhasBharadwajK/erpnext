@@ -216,12 +216,12 @@ class WorkOrder(Document):
 				for row in self.required_items:
 					row.source_warehouse = self.source_warehouse
 
-	def after_insert(self):
-		"""Auto-submit Work Order after warehouses are set"""
-		self.load_from_db()
-		if self.docstatus == 0:
-			self.submit()
-			self.update_status()
+	# def after_insert(self):
+	# 	"""Auto-submit Work Order after warehouses are set"""
+	# 	self.load_from_db()
+	# 	if self.docstatus == 0:
+	# 		self.submit()
+	# 		self.update_status()
 
 	def validate(self):
 		self.validate_production_item()
@@ -603,7 +603,7 @@ class WorkOrder(Document):
 		self.update_completed_qty_in_material_request()
 		self.update_planned_qty()
 		self.create_job_card()
-		self.set_workstation_to_job_cards()
+		# self.set_workstation_to_job_cards()
 
 	def set_workstation_to_job_cards(self):
 		job_cards = frappe.get_all("Job Card", filters={"work_order": self.name}, fields=["name"])
@@ -761,8 +761,8 @@ class WorkOrder(Document):
 		frappe.db.bulk_insert("Serial No", fields=fields, values=set(serial_nos_details))
 
 	def create_job_card(self):
-		if frappe.db.exists("Job Card", {"work_order": self.name, "docstatus": ["!=", 2]}):
-			return
+		# if frappe.db.exists("Job Card", {"work_order": self.name, "docstatus": ["!=", 2]}):
+		# 	return
 
 		manufacturing_settings_doc = frappe.get_doc("Manufacturing Settings")
 

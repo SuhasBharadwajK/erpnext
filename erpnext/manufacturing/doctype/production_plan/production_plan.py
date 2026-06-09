@@ -909,69 +909,89 @@ class ProductionPlan(Document):
 
 		return item_dict
 
+	# @frappe.whitelist()
+	# def make_work_order(self):
+
+	# 	frappe.enqueue(
+	# 		self.create_all_work_orders_and_job_cards_for_production_plan,
+	# 		queue="long",
+	# 		user=frappe.session.user if frappe.session else None,
+	# 	)
+
+	# 	frappe.msgprint(
+	# 		_("Work Orders are being created in the background"),
+	# 		alert=True,
+	# 		indicator="green",
+	# 	)
+
+	# def create_all_work_orders_and_job_cards_for_production_plan(self, user=None):
+	# 	from erpnext.manufacturing.doctype.work_order.work_order import get_default_warehouse
+
+	# 	if user:
+	# 		frappe.set_user(user)
+
+	# 	wo_list, po_list = [], []
+	# 	subcontracted_po = {}
+	# 	default_warehouses = get_default_warehouse()
+
+	# 	items_data = self.get_production_items()
+
+	# 	# Calculate total job cards to be created
+	# 	total_job_cards = 1
+
+	# 	# For FGs
+	# 	for _key, item in items_data.items():
+	# 		if item.get("bom_no"):
+	# 			total_job_cards += frappe.db.count("BOM Operation", filters={"parent": item.get("bom_no")})
+
+	# 	# For Sub-assemblies
+	# 	for row in self.sub_assembly_items:
+	# 		if row.get("bom_no"):
+	# 			total_job_cards += frappe.db.count("BOM Operation", filters={"parent": row.get("bom_no")})
+
+	# 	if user:
+	# 		frappe.publish_realtime(
+	# 			"production_plan_job_card_progress",
+	# 			{"total": total_job_cards * self.total_planned_qty, "production_plan": self.name},
+	# 			user=user,
+	# 		)
+
+	# 	try:
+	# 		self.make_work_order_for_finished_goods(wo_list, default_warehouses, items_data)
+	# 		self.make_work_order_for_subassembly_items(wo_list, subcontracted_po, default_warehouses)
+	# 		self.make_subcontracted_purchase_order(subcontracted_po, po_list)
+	# 		self.db_set("is_work_order_created", 1)
+	# 	except Exception:
+	# 		frappe.log_error(title="Error while creating work orders", message=frappe.get_traceback())
+
+	# 	if user:
+	# 		frappe.publish_realtime(
+	# 			"production_plan_job_card_progress",
+	# 			{"reload": True, "production_plan": self.name},
+	# 			user=user,
+	# 		)
+
+	# 	frappe.publish_realtime("refresh_mixer_station")
 	@frappe.whitelist()
 	def make_work_order(self):
-
-		frappe.enqueue(
-			self.create_all_work_orders_and_job_cards_for_production_plan,
-			queue="long",
-			user=frappe.session.user if frappe.session else None,
-		)
-
-		frappe.msgprint(
-			_("Work Orders are being created in the background"),
-			alert=True,
-			indicator="green",
-		)
-
-	def create_all_work_orders_and_job_cards_for_production_plan(self, user=None):
 		from erpnext.manufacturing.doctype.work_order.work_order import get_default_warehouse
-
-		if user:
-			frappe.set_user(user)
 
 		wo_list, po_list = [], []
 		subcontracted_po = {}
 		default_warehouses = get_default_warehouse()
 
-		items_data = self.get_production_items()
+		self.make_work_order_for_finished_goods(wo_list, default_warehouses)
+		self.make_work_order_for_subassembly_items(wo_list, subcontracted_po, default_warehouses)
+		self.make_subcontracted_purchase_order(subcontracted_po, po_list)
+		self.show_list_created_message("Work Order", wo_list)
+		self.show_list_created_message("Purchase Order", po_list)
 
-		# Calculate total job cards to be created
-		total_job_cards = 1
+		if not wo_list:
+			frappe.msgprint(_("No Work Orders were created"))
 
-		# For FGs
-		for _key, item in items_data.items():
-			if item.get("bom_no"):
-				total_job_cards += frappe.db.count("BOM Operation", filters={"parent": item.get("bom_no")})
+		if not po_list:
+			frappe.msgprint(_("No Purchase Orders were created"))
 
-		# For Sub-assemblies
-		for row in self.sub_assembly_items:
-			if row.get("bom_no"):
-				total_job_cards += frappe.db.count("BOM Operation", filters={"parent": row.get("bom_no")})
-
-		if user:
-			frappe.publish_realtime(
-				"production_plan_job_card_progress",
-				{"total": total_job_cards * self.total_planned_qty, "production_plan": self.name},
-				user=user,
-			)
-
-		try:
-			self.make_work_order_for_finished_goods(wo_list, default_warehouses, items_data)
-			self.make_work_order_for_subassembly_items(wo_list, subcontracted_po, default_warehouses)
-			self.make_subcontracted_purchase_order(subcontracted_po, po_list)
-			self.db_set("is_work_order_created", 1)
-		except Exception:
-			frappe.log_error(title="Error while creating work orders", message=frappe.get_traceback())
-
-		if user:
-			frappe.publish_realtime(
-				"production_plan_job_card_progress",
-				{"reload": True, "production_plan": self.name},
-				user=user,
-			)
-
-		frappe.publish_realtime("refresh_mixer_station")
 
 	def make_work_order_for_finished_goods(self, wo_list, default_warehouses, items_data=None):
 		if not items_data:
