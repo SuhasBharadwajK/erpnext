@@ -27,6 +27,7 @@
   "is_recovered",
   "is_repolished",
   "is_recalibrated",
+  "is_3cm_to_2cm",
   "is_sample",
   "updated_template",
   "quality_section",
@@ -324,12 +325,18 @@
    "fieldtype": "Check",
    "label": "Is Sample",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_3cm_to_2cm",
+   "fieldtype": "Check",
+   "label": "Is 3cm to 2cm"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-11 18:45:25.419319",
+ "modified": "2026-06-15 18:05:17.972961",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Slab",
