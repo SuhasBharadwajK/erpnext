@@ -26,6 +26,7 @@ class Slab(Document):
 		created_on: DF.Datetime | None
 		current_job_card: DF.Data | None
 		grade: DF.Link | None
+		is_3cm_to_2cm: DF.Check
 		is_cur_stage_complete: DF.Check
 		is_paused: DF.Check
 		is_prematurely_checked_out: DF.Check
