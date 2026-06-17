@@ -22,6 +22,25 @@ from erpnext.setup.doctype.mahi_granites_settings.mahi_granites_settings import 
 
 STAGES_TO_SKIP_IN_AUTO_MOVE = ["Re-Pressing", "Packed", "Shipped", "Discarded", "Quality Check", "Recovery", "Rejected"]
 
+SLAB_FIELDS_TO_GET = [
+	"name",
+	"number",
+	"serial_number",
+	"status",
+	"line",
+	"batch_number",
+	"template",
+	"is_cur_stage_complete",
+	"child_line",
+	"creation",
+	"modified",
+	"current_job_card",
+	"is_recovered",
+	"is_repolished",
+	"is_recalibrated",
+	"quality_assessment",
+]
+
 
 @frappe.whitelist()
 def create_slab(
@@ -174,7 +193,7 @@ def move_slab_to(
 
 
 @frappe.whitelist()
-def get_slabs_in(line: str, current_stage: str) -> list[dict]:
+def get_slabs_in(line: str, current_stage: str) -> list[Slab]:
 	slabs = frappe.db.get_list(
 		"Slab",
 		ignore_permissions=True,
@@ -183,24 +202,7 @@ def get_slabs_in(line: str, current_stage: str) -> list[dict]:
 			"status": current_stage,
 			"is_cur_stage_complete": False,
 		},
-		fields=[
-			"name",
-			"number",
-			"serial_number",
-			"status",
-			"line",
-			"batch_number",
-			"template",
-			"is_cur_stage_complete",
-			"child_line",
-			"creation",
-			"modified",
-			"current_job_card",
-			"is_recovered",
-			"is_repolished",
-			"is_recalibrated",
-			"quality_assessment",
-		],
+		fields=SLAB_FIELDS_TO_GET,
 	)
 
 	return slabs
@@ -243,23 +245,7 @@ def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=Fal
 		ignore_permissions=True,
 		filters={"status": ["in", valid_previous_stages], "is_cur_stage_complete": 1, "line": line},
 		limit=limit,  # Limit one to send only the first slab
-		fields=[
-			"name",
-			"serial_number",
-			"status",
-			"line",
-			"batch_number",
-			"template",
-			"creation",
-			"modified",
-			"child_line",
-			"current_job_card",
-			"is_cur_stage_complete",
-			"is_recovered",
-			"is_repolished",
-			"is_recalibrated",
-			"quality_assessment",
-		],
+		fields=SLAB_FIELDS_TO_GET,
 	)
 
 	return slabs
