@@ -66,7 +66,9 @@
   {
    "fieldname": "template",
    "fieldtype": "Link",
+   "in_global_search": 1,
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Template",
    "options": "Slab Template",
    "read_only": 1,
@@ -75,7 +77,9 @@
   {
    "fieldname": "status",
    "fieldtype": "Select",
+   "in_filter": 1,
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Status",
    "options": "Distribution\nPressing\nRe-Pressing\nHeating\nCooling\nCuring\nTrimming\nCalibration\nPolishing\nQuality Check\nRecovery\nPacked\nShipped\nDelivered\nDiscarded\nRejected",
    "read_only": 1,
@@ -211,6 +215,9 @@
   {
    "fieldname": "child_line",
    "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Mixer Line",
    "options": "Production Line"
   },
@@ -292,6 +299,8 @@
    "depends_on": "eval:doc.is_recovered;",
    "fieldname": "is_recovered",
    "fieldtype": "Check",
+   "in_filter": 1,
+   "in_standard_filter": 1,
    "label": "Is Recovered",
    "read_only": 1
   },
@@ -300,6 +309,8 @@
    "depends_on": "eval:doc.is_repolished;",
    "fieldname": "is_repolished",
    "fieldtype": "Check",
+   "in_filter": 1,
+   "in_standard_filter": 1,
    "label": "Is Repolished",
    "read_only": 1
   },
@@ -330,13 +341,15 @@
    "default": "0",
    "fieldname": "is_3cm_to_2cm",
    "fieldtype": "Check",
+   "in_filter": 1,
+   "in_standard_filter": 1,
    "label": "Is 3cm to 2cm"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-15 18:05:17.972961",
+ "modified": "2026-06-18 00:57:46.229123",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Slab",
