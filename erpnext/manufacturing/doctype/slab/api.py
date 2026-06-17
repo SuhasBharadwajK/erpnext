@@ -61,6 +61,7 @@ def create_slab(
 	new_slab.slab_history.append(slab_history_item)
 
 	new_slab.save(ignore_permissions=True)
+	_update_slab_seed()
 	return new_slab
 
 
@@ -530,6 +531,9 @@ def _get_slab_number(batch: str, line: str) -> int:
 		0,
 	)  # pyright: ignore
 
+	if slab_seed:
+		return slab_seed + 1
+
 	slab_count: int = (
 		frappe.db.count(
 			"Slab",
@@ -538,7 +542,23 @@ def _get_slab_number(batch: str, line: str) -> int:
 				["creation", ">=", month_start],
 			],
 		)
-		+ slab_seed
 	) + 1
 
 	return slab_count or 0
+
+
+def _update_slab_seed():
+	today = date.today()
+	curr_month = today.month
+	curr_year = today.year
+
+	month_start = f"{curr_year}-{curr_month:02d}-01"
+
+	# Increment slab seed for the current month if it is already set
+	mahi_granites_settings: MahiGranitesSettings = frappe.get_doc("Mahi Granites Settings")  # pyright: ignore[reportAssignmentType]
+	for seed in mahi_granites_settings.slab_seeds:
+		if seed.line and seed.seed_month and seed.seed_month.strftime("%Y-%m-%d") == month_start:  # pyright: ignore[reportAttributeAccessIssue]
+			seed.seed += 1
+			seed.save(ignore_permissions=True)
+
+	mahi_granites_settings.save(ignore_permissions=True)
