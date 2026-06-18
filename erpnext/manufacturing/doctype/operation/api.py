@@ -187,6 +187,7 @@ def get_open_job_cards(
 	slab_template="",
 	limit=0,
 	exclude_job_cards="",
+	work_orders:list[str] | None=None,
 ):
 	is_mixing = process == "Mixing"
 	if is_mixing:
@@ -220,6 +221,9 @@ def get_open_job_cards(
 			"docstatus": ["=", "0"],
 			"workstation": ws_query,
 		}
+
+	if work_orders:
+		filters["work_order"] = ["in", work_orders]
 
 	if slab_template:
 		filters["production_item"] = ["like", f"{slab_template} - %"]
