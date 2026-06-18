@@ -37,9 +37,12 @@ def load_slab_into_oven(oven_op: str, line: str, job_card_name: str, slab_templa
 	slab_name = new_oven_operation.slab or ""
 	oven_rack: OvenRack = frappe.get_doc("Oven Rack", rack_name)  # pyright: ignore[reportAssignmentType]
 
-	job_card_data = _get_oven_job_card_(line, include_wip=False, item_code=slab_template)
+	if not job_card_name:
+		job_card_data = _get_oven_job_card_(line, include_wip=False, item_code=slab_template)
+		job_card_name = job_card_data.name if job_card_data else ""
 
-	job_card_name = job_card_data.name
+	if not job_card_name:
+		raise Exception(f"No job card found for slab {slab_name}")
 
 	now_date_time = frappe.utils.now_datetime()  # pyright: ignore
 
