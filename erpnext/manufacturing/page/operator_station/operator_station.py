@@ -384,16 +384,17 @@ def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip
 
 
 @frappe.whitelist()
-def get_next_work_item(process, line="", include_wip=True):
+def get_next_work_item(process, line="", include_wip=True, slab: Slab | None = None):
 	if isinstance(include_wip, str):
 		include_wip = include_wip.lower() == "true"
 
-	job_card_data = _get_job_card_for_line_and_process(line, process, include_wip)
+	slab_template = slab.template if slab else None
+	job_card_data = _get_job_card_for_line_and_process(line, process, include_wip, item_code=slab_template)
 	job_card = job_card_data["top_job_card"]
 	available_job_cards_count = job_card_data["available_job_cards_count"]
 
 	# is_wip = job_card and job_card.status == "Work In Progress"
-	slab = frappe.get_doc("Slab", job_card.slab) if job_card and job_card.slab else None
+	slab = frappe.get_doc("Slab", job_card.slab) if job_card and job_card.slab else None  # pyright: ignore[reportAssignmentType]
 
 	slabs_for_process = get_slabs_for(
 		line, process, limit=1000
