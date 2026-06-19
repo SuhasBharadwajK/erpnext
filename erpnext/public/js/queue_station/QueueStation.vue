@@ -12,6 +12,16 @@ const currentIncomingSlab = computed(() => {
     return incomingSlabs.value[0];
 });
 
+const slabSearch = ref('');
+const queueCollapsed = ref(false);
+const filteredIncomingSlabs = computed(() => {
+    const q = slabSearch.value.trim().toLowerCase();
+    if (!q) return incomingSlabs.value;
+    return incomingSlabs.value.filter(item =>
+        `${item.name} ${item.template}`.toLowerCase().includes(q)
+    );
+});
+
 const slabQueue = ref([]);
 const processTimerHandles = reactive({});
 const error = ref(null);
@@ -225,12 +235,33 @@ frappe.realtime.on('slab_checkout', (slab) => {
         <div class="d-flex w-100">
             <!-- Sidebar -->
             <div v-if="incomingSlabs.length > 1" class="queue-sidebar border-right flex-shrink-0 p-3 mr-4"
-                style="width: 300px; max-height: calc(100vh - 100px); overflow-y: auto;">
-                <h5 class="mb-3 font-weight-bold text-center border-bottom pb-2">
-                    {{ __('Incoming Slabs') }}
-                </h5>
-                <div>
-                    <div v-for="item in incomingSlabs" :key="item.name"
+                :style="{ width: queueCollapsed ? 'auto' : '300px', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }">
+                <div class="d-flex align-items-center mb-3 border-bottom pb-2"
+                    :class="queueCollapsed ? 'justify-content-center' : 'justify-content-between'">
+                    <h5 v-if="!queueCollapsed" class="mb-0 font-weight-bold">
+                        {{ __('Incoming Slabs') }}
+                    </h5>
+                    <button class="btn btn-light btn-sm" @click="queueCollapsed = !queueCollapsed"
+                        :title="queueCollapsed ? __('Expand queue') : __('Collapse queue')">
+                        <span class="fa" :class="queueCollapsed ? 'fa-angle-double-right' : 'fa-angle-double-left'"></span>
+                    </button>
+                </div>
+
+                <template v-if="!queueCollapsed">
+                <div class="input-group input-group-sm mb-3">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text bg-transparent border-right-0">
+                            <span class="fa fa-search text-muted"></span>
+                        </span>
+                    </div>
+                    <input v-model="slabSearch" type="text" class="form-control search-input border-left-0"
+                        :placeholder="__('Search slabs...')">
+                </div>
+                <div v-if="filteredIncomingSlabs.length === 0" class="text-muted text-center py-3 small">
+                    {{ __('No matching slabs') }}
+                </div>
+                <div v-else>
+                    <div v-for="item in filteredIncomingSlabs" :key="item.name"
                         @click="!isProcessing && (selectedSlabId = item.name)" :class="[
                             'card pointer mb-2 shadow-sm slab-card border-0',
                             currentIncomingSlab && currentIncomingSlab.name === item.name ? 'active-card' : '',
@@ -247,6 +278,7 @@ frappe.realtime.on('slab_checkout', (slab) => {
                         </div>
                     </div>
                 </div>
+                </template>
             </div>
 
             <!-- Main Content -->
@@ -434,5 +466,9 @@ frappe.realtime.on('slab_checkout', (slab) => {
 
 .list-move {
     transition: transform 0.3s ease;
+}
+
+.search-input {
+    border: 1px solid #c7c7c7;
 }
 </style>

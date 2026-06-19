@@ -1,18 +1,17 @@
-from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP
-from erpnext.manufacturing.doctype.slab.slab import ALLOWED_STAGES
-from erpnext.manufacturing.doctype.work_order import work_order
-from erpnext.manufacturing.page.operator_station.operator_station import finish_process
+from copy import deepcopy
 from typing import cast
 
 import frappe
-from copy import deepcopy
 
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard, make_stock_entry
+from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP
 from erpnext.manufacturing.doctype.operation.api import get_open_job_cards
 from erpnext.manufacturing.doctype.production_line.production_line import get_all_child_lines
 from erpnext.manufacturing.doctype.slab.api import get_slabs_for
 from erpnext.manufacturing.doctype.slab.slab import Slab
+from erpnext.manufacturing.doctype.work_order import work_order
 from erpnext.manufacturing.page.operator_station.operator_station import (
+	finish_process,
 	get_top_job_card_for_process,
 	start_process,
 )
@@ -25,7 +24,7 @@ def get_queue_data(line, station_name: str):
 		"Warehouse", {"mfg_process_type": station_name, "production_line": line}, "is_standalone"
 	)
 	# If it is, set the limit to 50, else set it to 1.
-	limit = 50 if is_warehouse_standalone else 1
+	limit = 200 if is_warehouse_standalone else 1
 
 	# 1. Get Incoming Slabs (Ready for the current station)
 	incoming_slabs = get_slabs_for(line, station_name, limit=limit)
@@ -98,8 +97,8 @@ def _get_next_corrective_job_card(job_card: str, process_name: str):
 	if not next_process:
 		return None
 
-	slab_no = frappe.db.get_value("Job Card", job_card, "slab")
-	slab: Slab = frappe.get_doc("Slab", slab_no)
+	slab_no: str = frappe.db.get_value("Job Card", job_card, "slab") or ""  # pyright: ignore[reportAssignmentType]
+	slab: Slab = frappe.get_doc("Slab", slab_no)  # pyright: ignore[reportAssignmentType]
 	history_item = next((item for item in slab.slab_history if item.station == next_process), None)
 	if not history_item:
 		return None

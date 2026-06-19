@@ -25,6 +25,14 @@ const error = ref(null);
 const batchNo = ref(null);
 const mixerNumber = ref(null);
 const slabsQueue = ref([]);
+const slabSearch = ref('');
+const filteredSlabsQueue = computed(() => {
+	const q = slabSearch.value.trim().toLowerCase();
+	if (!q) return slabsQueue.value;
+	return slabsQueue.value.filter(item =>
+		`${item.batch_number} ${item.serial_number} ${item.template}`.toLowerCase().includes(q)
+	);
+});
 const is_standalone = ref(false);
 const availableSlabsCount = ref(0);
 const availableJobCardsCount = ref(0);
@@ -662,18 +670,28 @@ async function selectSlab(slab) {
 	<!-- Sidebar: Queue -->
 	<div class="operator-station-container d-flex h-100 w-100">
 
-		<div v-if="is_standalone" class="queue-sidebar border-right p-3" style="width: 300px; overflow-y: auto;">
+		<div v-if="is_standalone && !processStarted" class="queue-sidebar border-right p-3" style="width: 300px; overflow-y: auto;">
 			<h5 class="mb-3 font-weight-bold text-center border-bottom pb-2">
 				{{ __('Incoming Slabs') }}
 			</h5>
 
-			<div v-if="slabsQueue.length === 0" class="text-muted text-center py-4 rounded border empty-queue-state">
+			<div class="input-group input-group-sm mb-3">
+				<div class="input-group-prepend">
+					<span class="input-group-text bg-transparent border-right-0">
+						<span class="fa fa-search text-muted"></span>
+					</span>
+				</div>
+				<input v-model="slabSearch" type="text" class="form-control search-input border-left-0"
+					:placeholder="__('Search slabs...')">
+			</div>
+
+			<div v-if="filteredSlabsQueue.length === 0" class="text-muted text-center py-4 rounded border empty-queue-state">
 				<span class="fa fa-inbox fa-2x mb-2 d-block text-muted-light"></span>
-				{{ __('No slabs in queue') }}
+				{{ slabSearch ? __('No matching slabs') : __('No slabs in queue') }}
 			</div>
 
 			<div v-else>
-				<div v-for="item in slabsQueue" :key="item.name"
+				<div v-for="item in filteredSlabsQueue" :key="item.name"
 					@click="!(processStarted && !jobcardSubmitted) && selectSlab(item)" :class="[
 						'card pointer mb-2 shadow-sm slab-card border-0',
 						(processStarted && !jobcardSubmitted) ? 'btn-disabled-pointer' : ''
@@ -974,4 +992,9 @@ async function selectSlab(slab) {
 .btn-disabled-pointer {
 	cursor: not-allowed;
 }
+
+.search-input {
+	border: 1px solid #c7c7c7;
+}
+
 </style>

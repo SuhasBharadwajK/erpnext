@@ -399,6 +399,7 @@ def get_next_work_item(process, line="", include_wip=True):
 		line, process, limit=1000
 	)  # Giving an arbitrarily high limit to make sure that the exact number of slabs is fetched.
 
+	slabs_for_process = [slab for slab in slabs_for_process if job_card.production_item.startswith(slab.template)]
 	slab = slab if slab else (slabs_for_process[0] if slabs_for_process else None)
 	available_slabs_count = len(slabs_for_process)
 
