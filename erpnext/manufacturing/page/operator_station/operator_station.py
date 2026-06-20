@@ -398,11 +398,10 @@ def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip
 
 
 @frappe.whitelist()
-def get_next_work_item(process, line="", include_wip=True, slab: Slab | None = None):
+def get_next_work_item(process, line="", include_wip=True, slab_template: str | None = None):
 	if isinstance(include_wip, str):
 		include_wip = include_wip.lower() == "true"
 
-	slab_template = slab.template if slab else None
 	job_card_data = _get_job_card_for_line_and_process(line, process, include_wip, item_code=slab_template)
 	job_card = job_card_data["top_job_card"]
 	available_job_cards_count = job_card_data["available_job_cards_count"]
