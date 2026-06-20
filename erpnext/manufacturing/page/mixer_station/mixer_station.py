@@ -204,6 +204,7 @@ def confirm_and_start_mixing(job_card, ingredients, bom_uom):
 			"mixer_start_time": jc.started_time,
 			"current_time": jc.current_time,
 		}
+
 	except Exception as e:
 		frappe.db.rollback()
 		frappe.throw(f"Failed to confirm and start mixing: {e}")
