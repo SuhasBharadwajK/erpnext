@@ -11,6 +11,18 @@ from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PR
 from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
 from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
 
+MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP = {
+	"mixing": "MAT-STE-MIXN-TRF-.YYYY.-",
+	"distribution": "MAT-STE-DIST-TRF-.YYYY.-",
+	"pressing": "MAT-STE-PRES-TRF-.YYYY.-",
+	"heating": "MAT-STE-HEAT-TRF-.YYYY.-",
+	"cooling": "MAT-STE-COOL-TRF-.YYYY.-",
+	"trimming": "MAT-STE-TRIM-TRF-.YYYY.-",
+	"calibration": "MAT-STE-CLBR-TRF-.YYYY.-",
+	"polishing": "MAT-STE-POLI-TRF-.YYYY.-",
+	"quality check": "MAT-STE-QUAL-TRF-.YYYY.-",
+}
+
 
 @frappe.whitelist()
 def transfer_to_next_process(current_job_card, current_work_order, qty=None, process=None, mixer_number=None):
@@ -113,6 +125,7 @@ def transfer_to_next_process(current_job_card, current_work_order, qty=None, pro
 		s_warehouse=wo.fg_warehouse,
 		t_warehouse=next_wo_doc.wip_warehouse,
 		job_card_item=job_card_item,
+		next_station=next_process or "",
 	)
 
 	job_card_item_doc = frappe.get_doc("Job Card Item", job_card_item)
@@ -333,8 +346,9 @@ def create_material_transfer_stock_entry(
 	s_warehouse: str,
 	t_warehouse: str,
 	job_card_item: str,
+	next_station: str,
 ):
-	stock_entry = frappe.new_doc("Stock Entry")  # pyright: ignore
+	stock_entry: StockEntry = frappe.new_doc("Stock Entry")  # pyright: ignore
 	stock_entry.purpose = "Material Transfer for Manufacture"
 	stock_entry.work_order = next_wo  # pyright: ignore
 	stock_entry.job_card = open_job_card  # pyright: ignore # No job card for inter-process transfer
@@ -356,8 +370,11 @@ def create_material_transfer_stock_entry(
 			"job_card_item": job_card_item,
 		},
 	)
+
+	stock_entry.naming_series = MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP.get(next_station.lower(), "")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry.set_stock_entry_type()
 	stock_entry.set_missing_values()
+	stock_entry.insert()
 	stock_entry.submit()
 
 	return stock_entry

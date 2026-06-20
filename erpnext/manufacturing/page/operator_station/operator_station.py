@@ -40,6 +40,19 @@ from erpnext.manufacturing.doctype.work_order.work_order import (
 from erpnext.manufacturing.doctype.workstation.workstation import Workstation
 from erpnext.setup.doctype.employee.api import get_current_user_context
 from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
+from erpnext.stock.doctype.warehouse.warehouse import Warehouse
+
+STOCK_ENTRY_NAMING_SERIES_MAP = {
+	"mixing": "MAT-STE-MIXN-MFG-.YYYY.-",
+	"distribution": "MAT-STE-DIST-MFG-.YYYY.-",
+	"pressing": "MAT-STE-PRES-MFG-.YYYY.-",
+	"heating": "MAT-STE-HEAT-MFG-.YYYY.-",
+	"cooling": "MAT-STE-COOL-MFG-.YYYY.-",
+	"trimming": "MAT-STE-TRIM-MFG-.YYYY.-",
+	"calibration": "MAT-STE-CLBR-MFG-.YYYY.-",
+	"polishing": "MAT-STE-POLI-MFG-.YYYY.-",
+	"quality check": "MAT-STE-QUAL-MFG-.YYYY.-",
+}
 
 
 @frappe.whitelist()
@@ -244,6 +257,7 @@ def finish_process(
 				item.slab_quality_grade = slab_grade
 				item.to_slab_grade = slab_grade
 
+	stock_entry_manufacture.naming_series = STOCK_ENTRY_NAMING_SERIES_MAP.get(process_name.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry_manufacture.fg_completed_qty = job_card_qty
 	stock_entry_manufacture.insert()
 	stock_entry_manufacture.submit()
