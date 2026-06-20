@@ -245,7 +245,7 @@ def finish_process(
 				item.to_slab_grade = slab_grade
 
 	stock_entry_manufacture.fg_completed_qty = job_card_qty
-	stock_entry_manufacture.save()
+	stock_entry_manufacture.insert()
 	stock_entry_manufacture.submit()
 	wo.update_work_order_qty()
 	wo.reload()
