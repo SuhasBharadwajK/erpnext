@@ -169,7 +169,6 @@ def get_mixer_ingredients(job_card):
 def confirm_and_start_mixing(job_card, ingredients, bom_uom):
 	"""Create Stock Entry from mixer quantities and mark Job Card ready."""
 	try:
-		frappe.db.begin()
 		ingredients = json.loads(ingredients)
 		jc = frappe.get_doc("Job Card", job_card)
 
@@ -195,7 +194,7 @@ def confirm_and_start_mixing(job_card, ingredients, bom_uom):
 		se.submit()
 
 		start_mixing(job_card)
-		frappe.db.commit()
+
 		return {
 			"stock_entry": se.name,
 			"total_for_quantity": total_qty,

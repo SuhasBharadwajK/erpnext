@@ -9,12 +9,11 @@ from erpnext.manufacturing.doctype.slab.slab import Slab
 @frappe.whitelist()
 def unload_slab_to_trimming(slab_number: str):
 	try:
-		frappe.db.begin()
 		finish_curing(slab_number)
 		frappe.db.commit()
-
 	except Exception:
 		frappe.db.rollback()
+		raise
 
 
 def finish_curing(slab_number: str):

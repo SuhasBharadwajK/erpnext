@@ -47,8 +47,6 @@ def load_slab_into_oven(oven_op: str, line: str, job_card_name: str, slab_templa
 	now_date_time = frappe.utils.now_datetime()  # pyright: ignore
 
 	try:
-		frappe.db.begin()
-
 		# Start the Job Card
 		start_process(job_card_name, slab_name, slab_template, "Heating")
 		slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
@@ -117,7 +115,6 @@ def unload_slab_from_oven(rack_name: str, slab_name: str, slab_template: str, va
 	rack.start_time = None
 
 	try:
-		frappe.db.begin()
 		rack.save()
 
 		op.submit()

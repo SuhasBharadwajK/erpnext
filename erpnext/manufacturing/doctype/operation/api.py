@@ -125,8 +125,6 @@ def transfer_to_next_process(current_job_card, current_work_order, qty=None, pro
 		open_jc_doc.mixer_number = mixer_number
 	open_jc_doc.save(ignore_permissions=True)
 
-	frappe.db.commit()
-
 	if process == "Mixing":
 		frappe.publish_realtime("refresh_operator_station")
 
