@@ -371,7 +371,7 @@ def create_material_transfer_stock_entry(
 		},
 	)
 
-	stock_entry.naming_series = MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP.get(next_station.lower(), "")  # pyright: ignore[reportAttributeAccessIssue]
+	stock_entry.naming_series = MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP.get(next_station.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry.set_stock_entry_type()
 	stock_entry.set_missing_values()
 	stock_entry.insert()
