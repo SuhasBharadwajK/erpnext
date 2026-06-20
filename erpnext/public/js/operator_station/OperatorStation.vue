@@ -331,39 +331,18 @@ async function loadData() {
 async function fetchQueue(line, station) {
 	try {
 		slabsQueue.value = [];
-		// get the warehouse_name whose production_line is line and warehouse_type is station
-		const warehouse = await frappe.db.get_value(
-			'Warehouse',
-			{
-				production_line: line,
-				warehouse_type: station
-			},
-			['name', 'warehouse_name', 'is_standalone']
-		);
-
-		if (warehouse.message.is_standalone) {
-			const res = await frappe.call({
-				method: 'erpnext.manufacturing.doctype.slab.api.get_slabs_in',
-				args: {
-					line: line,
-					current_stage: station.toLowerCase(),
-				}
-			});
-			if (res.message) {
-				slabsQueue.value = res.message || [];
-			}
-		}
-
-		const result = await frappe.call({
-			method: 'erpnext.manufacturing.doctype.slab.api.get_slabs_for',
+		const res = await frappe.call({
+			method: 'erpnext.manufacturing.page.operator_station.operator_station.get_queue_for_process',
 			args: {
+				process: station.toLowerCase(),
 				line: line,
-				next_stage: station.toLowerCase(),
-				limit: 100, // TODO: change this limit
+				slab_number_to_ignore: slabNumber.value,
 			}
 		});
-		if (result.message) {
-			slabsQueue.value = slabsQueue.value.concat(result.message);
+
+		if (res.message) {
+			availableSlabsCount.value = res.message.length;
+			slabsQueue.value = res.message || [];
 		}
 	} catch (e) {
 		console.error('Failed to fetch queue:');
@@ -670,7 +649,7 @@ async function selectSlab(slab) {
 	<!-- Sidebar: Queue -->
 	<div class="operator-station-container d-flex h-100 w-100">
 
-		<div v-if="is_standalone && !processStarted" class="queue-sidebar border-right p-3" style="width: 300px; overflow-y: auto;">
+		<div v-if="is_standalone && !processStarted" class="queue-sidebar border-right p-3" style="width: 300px; max-height: calc(100vh - 170px); overflow-y: auto;">
 			<h5 class="mb-3 font-weight-bold text-center border-bottom pb-2">
 				{{ __('Incoming Slabs') }}
 			</h5>

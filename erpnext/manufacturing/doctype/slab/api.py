@@ -193,15 +193,15 @@ def move_slab_to(
 
 
 @frappe.whitelist()
-def get_slabs_in(line: str, current_stage: str) -> list[Slab]:
+def get_slabs_in(line: str, current_stage: str, slab_number_to_ignore: str = "") -> list[Slab]:
+	filters = {"line": line, "status": current_stage, "is_cur_stage_complete": False}
+	if slab_number_to_ignore:
+		filters["name"] = ["!=", slab_number_to_ignore]
+
 	slabs = frappe.db.get_list(
 		"Slab",
 		ignore_permissions=True,
-		filters={
-			"line": line,
-			"status": current_stage,
-			"is_cur_stage_complete": False,
-		},
+		filters=filters,
 		fields=SLAB_FIELDS_TO_GET,
 	)
 
@@ -209,7 +209,7 @@ def get_slabs_in(line: str, current_stage: str) -> list[Slab]:
 
 
 @frappe.whitelist()
-def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=False) -> list[Slab]:
+def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=False, slab_number_to_ignore: str = "") -> list[Slab]:
 	include_current_stage = bool(include_current_stage)
 	# Determine valid previous stages based on the next_stage and rules
 	valid_previous_stages = []
@@ -239,11 +239,15 @@ def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=Fal
 	if include_current_stage:
 		valid_previous_stages.append(next_stage)
 
+	filters = {"status": ["in", valid_previous_stages], "is_cur_stage_complete": 1, "line": line}
+	if slab_number_to_ignore:
+		filters["name"] = ["!=", slab_number_to_ignore]
+
 	slabs = frappe.db.get_list(
 		"Slab",
 		order_by="modified asc",
 		ignore_permissions=True,
-		filters={"status": ["in", valid_previous_stages], "is_cur_stage_complete": 1, "line": line},
+		filters=filters,
 		limit=limit,  # Limit one to send only the first slab
 		fields=SLAB_FIELDS_TO_GET,
 	)

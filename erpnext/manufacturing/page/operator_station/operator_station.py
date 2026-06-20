@@ -26,6 +26,7 @@ from erpnext.manufacturing.doctype.slab.api import (
 	checkout_slab,
 	create_slab,
 	get_slabs_for,
+	get_slabs_in,
 	move_slab_to,
 	pause_or_resume_slab_operation,
 )
@@ -423,6 +424,43 @@ def get_next_work_item(process, line="", include_wip=True, slab_template: str | 
 		"job_card": job_card,
 		"available_job_cards_count": available_job_cards_count,
 	}
+
+
+@frappe.whitelist()
+def get_queue_for_process(process, slab_number_to_ignore: str, line: str, include_wip=True, include_paused=True):
+	warehouse: Warehouse | None = None
+	if isinstance(line, str):
+		warehouse = frappe.db.get_value(  # pyright: ignore[reportAssignmentType]
+			'Warehouse',
+			{
+				"production_line": line,
+				"warehouse_type": process
+			},
+			['name', 'warehouse_name', 'is_standalone'],  # pyright: ignore[reportArgumentType]
+			as_dict=True,
+		)
+
+	limit = 9999999 if warehouse and warehouse.is_standalone else 1
+	job_cards = get_open_job_cards(
+		process, include_wip=include_wip, include_paused=include_paused, limit=limit
+	)
+
+	if not job_cards:
+		return []
+
+	prod_line: str = line if isinstance(line, str) else line[0] if line else ""
+	slabs_for_current_station = get_slabs_for(prod_line, process, limit=limit, slab_number_to_ignore=slab_number_to_ignore)
+
+	slabs_in_current_station = []
+	if warehouse and warehouse.is_standalone:
+		slabs_in_current_station = get_slabs_in(prod_line, process, slab_number_to_ignore=slab_number_to_ignore)
+
+	all_slabs = slabs_for_current_station + slabs_in_current_station
+	# Return only those slabs whose templates are in job card's production items.
+	unique_prod_items = list(set([job_card.production_item for job_card in job_cards]))
+	slabs_in_job_cards = [slab for slab in all_slabs if any(slab.template in item for item in unique_prod_items)]
+
+	return slabs_in_job_cards
 
 
 def get_top_job_card_for_process(
