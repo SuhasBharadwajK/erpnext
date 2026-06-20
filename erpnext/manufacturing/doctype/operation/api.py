@@ -381,10 +381,14 @@ def create_material_transfer_stock_entry(
 
 
 @frappe.whitelist()
-def get_job_card_for_operation(operation: str, slab_number: str = None):
-	open_job_card: str = frappe.db.get_value(
+def get_job_card_for_operation(operation: str, slab_number: str | None = None):
+	filters = {"operation": operation, "status": "Open", "docstatus": 0}
+	if slab_number:
+		filters["slab"] = slab_number
+
+	open_job_card: str = frappe.db.get_value(  # pyright: ignore[reportAssignmentType]
 		"Job Card",
-		{"slab": slab_number, "operation": operation, "status": "Open", "docstatus": 0},
+		filters,
 		"name",
 		order_by="creation desc",
 	)
