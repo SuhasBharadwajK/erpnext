@@ -390,20 +390,20 @@ def set_machine_status(status: str, station: str, line_name: str | None, machine
 	machine.reload()
 
 
-def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip=True, item_code=None):
+def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip=True, item_code=None, work_orders: list[str] | None = None):
 	child_lines = get_all_child_lines(line_name) or []
 	job_card_data = get_top_job_card_for_process(
-		process, child_lines if child_lines else line_name, include_wip, item_code=item_code
+		process, child_lines if child_lines else line_name, include_wip, item_code=item_code, work_orders=work_orders
 	)
 	return job_card_data
 
 
 @frappe.whitelist()
-def get_next_work_item(process, line="", include_wip=True, slab_template: str | None = None):
+def get_next_work_item(process, line="", include_wip=True, slab_template: str | None = None, work_orders: list[str] | None = None):
 	if isinstance(include_wip, str):
 		include_wip = include_wip.lower() == "true"
 
-	job_card_data = _get_job_card_for_line_and_process(line, process, include_wip, item_code=slab_template)
+	job_card_data = _get_job_card_for_line_and_process(line, process, include_wip, item_code=slab_template, work_orders=work_orders)
 	job_card = job_card_data["top_job_card"]
 	available_job_cards_count = job_card_data["available_job_cards_count"]
 
@@ -464,7 +464,7 @@ def get_queue_for_process(process, slab_number_to_ignore: str, line: str, includ
 
 
 def get_top_job_card_for_process(
-	process, line: str | list = "", include_wip=True, include_paused=True, item_code=None
+	process, line: str | list = "", include_wip=True, include_paused=True, item_code=None, work_orders: list[str] | None = None,
 ):
 	if line and not isinstance(line, list):
 		child_lines = get_all_child_lines(line)
@@ -472,7 +472,7 @@ def get_top_job_card_for_process(
 			line = child_lines
 
 	job_cards = get_open_job_cards(
-		process, line, include_wip, include_paused=include_paused, item_code=item_code
+		process, line, include_wip, include_paused=include_paused, item_code=item_code, work_orders=work_orders
 	)
 	return {
 		"top_job_card": job_cards[0] if job_cards else None,
