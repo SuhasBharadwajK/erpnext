@@ -80,7 +80,6 @@ def create_slab(
 	new_slab.slab_history.append(slab_history_item)
 
 	new_slab.save(ignore_permissions=True)
-	_update_slab_seed()
 	return new_slab
 
 
@@ -522,6 +521,7 @@ def _get_slab_number(batch: str, line: str) -> int:
 	)  # pyright: ignore
 
 	if slab_seed:
+		_update_slab_seed()
 		return slab_seed + 1
 
 	slab_count: int = (
