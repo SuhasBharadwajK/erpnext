@@ -395,6 +395,7 @@ def _get_job_card_for_line_and_process(line_name: str, process: str, include_wip
 	job_card_data = get_top_job_card_for_process(
 		process, child_lines if child_lines else line_name, include_wip, item_code=item_code, work_orders=work_orders
 	)
+
 	return job_card_data
 
 
@@ -427,7 +428,7 @@ def get_next_work_item(process, line="", include_wip=True, slab_template: str | 
 
 
 @frappe.whitelist()
-def get_queue_for_process(process, slab_number_to_ignore: str, line: str, include_wip=True, include_paused=True):
+def get_queue_for_process(process, slab_number_to_ignore: str, line: str | list[str], include_wip=True, include_paused=True):
 	warehouse: Warehouse | None = None
 	if isinstance(line, str):
 		warehouse = frappe.db.get_value(  # pyright: ignore[reportAssignmentType]
@@ -441,8 +442,15 @@ def get_queue_for_process(process, slab_number_to_ignore: str, line: str, includ
 		)
 
 	limit = 9999999 if warehouse and warehouse.is_standalone else 1
+
+	prod_line: str = deepcopy(line) if isinstance(line, str) else line[0] if line else ""
+	if line and not isinstance(line, list):
+		child_lines = get_all_child_lines(line)
+		if child_lines:
+			line = child_lines  # pyright: ignore[reportAssignmentType]
+
 	job_cards = get_open_job_cards(
-		process, include_wip=include_wip, include_paused=include_paused, limit=limit
+		process, line=line, include_wip=include_wip, include_paused=include_paused, limit=limit
 	)
 
 	if not job_cards:

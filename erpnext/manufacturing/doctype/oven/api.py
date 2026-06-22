@@ -3,10 +3,12 @@ import json
 import frappe
 
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard
+from erpnext.manufacturing.doctype.operation.api import get_open_job_cards
 from erpnext.manufacturing.doctype.oven.oven import Oven
 from erpnext.manufacturing.doctype.oven_operation.oven_operation import OvenOperation
 from erpnext.manufacturing.doctype.oven_rack.oven_rack import OvenRack
 from erpnext.manufacturing.doctype.production_line.production_line import get_all_child_lines
+from erpnext.manufacturing.doctype.slab.api import get_slabs_for
 from erpnext.manufacturing.doctype.slab.slab import Slab
 from erpnext.manufacturing.doctype.slab_history.slab_history import SlabHistory
 from erpnext.manufacturing.page.operator_station.operator_station import (
@@ -24,6 +26,41 @@ def get_oven_from_line(line: str):
 		return frappe.get_doc("Oven", oven_list[0].name)
 
 	return None
+
+
+@frappe.whitelist()
+def get_slab_and_job_card_for_oven(process, line="", include_wip=True, slab_template: str | None = None, work_orders: list[str] | None = None):
+	if isinstance(include_wip, str):
+		include_wip = include_wip.lower() == "true"
+
+	slabs_for_process = get_slabs_for(
+		line, process, limit=1000
+	)  # Giving an arbitrarily high limit to make sure that the exact number of slabs is fetched.
+
+	if line and not isinstance(line, list):
+		child_lines = get_all_child_lines(line)
+		if child_lines:
+			line = child_lines  # pyright: ignore[reportAssignmentType]
+
+	if not slabs_for_process:
+		return {
+			"slab": None,
+			"available_slabs_count": 0,
+			"job_card": None,
+			"available_job_cards_count": 0,
+		}
+
+	slab = slabs_for_process[0]
+	job_cards = get_open_job_cards(
+		process, line=line, include_wip=include_wip, include_paused=False, limit=1, item_code=slab.template
+	)
+
+	return {
+		"slab": slab,
+		"available_slabs_count": len(slabs_for_process),
+		"job_card": job_cards[0] if job_cards else None,
+		"available_job_cards_count": len(job_cards),
+	}
 
 
 @frappe.whitelist()

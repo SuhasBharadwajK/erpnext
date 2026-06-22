@@ -120,13 +120,13 @@ const fetch_slab_for_job_card = async (play_ding = false) => {
     loadingSlab.value = true;
     try {
         const result = await frappe.call({
-            method: 'erpnext.manufacturing.page.operator_station.operator_station.get_next_work_item',
+            method: 'erpnext.manufacturing.doctype.oven.api.get_slab_and_job_card_for_oven',
             args: {
                 process: "Heating",
                 line: work_context.assigned_line,
                 include_wip: false
             }
-        });
+		});
 
         if (!selectedSlab.value && result.message?.slab && play_ding) {
             erpnext.utils.play_ding("new_slab");
