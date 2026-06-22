@@ -456,7 +456,6 @@ def get_queue_for_process(process, slab_number_to_ignore: str, line: str | list[
 	if not job_cards:
 		return []
 
-	prod_line: str = line if isinstance(line, str) else line[0] if line else ""
 	slabs_for_current_station = get_slabs_for(prod_line, process, limit=limit, slab_number_to_ignore=slab_number_to_ignore)
 
 	slabs_in_current_station = []
