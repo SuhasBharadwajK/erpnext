@@ -767,6 +767,43 @@ frappe.ui.form.on("Production Plan", {
 			let d = frappe.prompt(
 				fields,
 				(values) => {
+					let delete_message = __("Deleting Job Cards");
+					frappe.show_progress(delete_message, 0, 100, __("Please wait..."));
+
+					let current_progress = 0;
+					let total_progress = 1;
+
+					// The deletion publishes progress while the request is in flight,
+					// so subscribe before firing the call (not in its callback).
+					frappe.realtime.on("production_plan_delete_job_card_progress", (data) => {
+						if (data.production_plan !== frm.doc.name) return;
+
+						if (data.total) {
+							total_progress = data.total;
+							current_progress = 0;
+						}
+
+						if (data.increment) {
+							current_progress += data.increment;
+						}
+
+						let percent = (current_progress / total_progress) * 100;
+						if (percent > 100) percent = 100;
+
+						frappe.show_progress(
+							delete_message,
+							percent,
+							100,
+							__("{0} of {1} Job Cards deleted", [current_progress, total_progress])
+						);
+
+						if (data.reload) {
+							frappe.show_progress(delete_message, 100, 100, __("Completed deleting all job cards."));
+							frappe.realtime.off("production_plan_delete_job_card_progress");
+							setTimeout(() => frappe.hide_progress(), 2000);
+						}
+					});
+
 					frappe.call({
 						method: "erpnext.manufacturing.doctype.production_plan.api.delete_job_cards",
 						args: {
@@ -777,6 +814,10 @@ frappe.ui.form.on("Production Plan", {
 							item_code: values.item_name,
 						},
 						callback: function (r) {
+							// Stop listening even if the server threw before publishing
+							// the final "reload" event (e.g. no open job cards found).
+							frappe.realtime.off("production_plan_delete_job_card_progress");
+
 							if (!r.exc) {
 								let count = r.message.deleted_count;
 								let reason = r.message.reason;
@@ -788,6 +829,8 @@ frappe.ui.form.on("Production Plan", {
 								frm.set_value("deleted_job_card_count", count);
 
 								frm.reload_doc();
+							} else {
+								frappe.hide_progress();
 							}
 						}
 					});
