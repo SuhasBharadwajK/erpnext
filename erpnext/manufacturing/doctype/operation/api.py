@@ -1,7 +1,8 @@
+import time
 from copy import deepcopy
 
 import frappe
-from frappe import _
+from frappe import QueryDeadlockError, _
 from frappe.utils import flt
 
 from erpnext.manufacturing.doctype.bom.bom import BOM
@@ -374,8 +375,21 @@ def create_material_transfer_stock_entry(
 	stock_entry.naming_series = MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP.get(next_station.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry.set_stock_entry_type()
 	stock_entry.set_missing_values()
-	stock_entry.insert()
-	stock_entry.submit()
+
+	frappe.db.savepoint("stock_entry_checkpoint")
+
+	for i in range(10):
+		try:
+			stock_entry.insert()
+			stock_entry.submit()
+			break
+		except QueryDeadlockError:
+			frappe.db.rollback(save_point="stock_entry_checkpoint")
+			if i <= 9:
+				time.sleep(0.5)
+				continue
+
+			raise
 
 	return stock_entry
 
