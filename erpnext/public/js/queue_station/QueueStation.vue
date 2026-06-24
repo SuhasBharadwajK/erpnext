@@ -23,6 +23,7 @@ const filteredIncomingSlabs = computed(() => {
 });
 
 const slabQueue = ref([]);
+const enforceQueue = ref(false);
 const processTimerHandles = reactive({});
 const error = ref(null);
 const isProcessing = ref(false);
@@ -81,6 +82,7 @@ const loadData = async (play_ding = false) => {
             }
 
             slabQueue.value = res.message.slabs_queue || [];
+            enforceQueue.value = !!res.message.enforce_queue;
 
             // Initialize timers for the current process queue
             slabQueue.value.forEach(job => {
@@ -139,7 +141,7 @@ const startProcess = async (slab) => {
     );
 };
 
-const finishProcess = async (job) => {
+const finishProcess = async (job, index) => {
     frappe.confirm(
         __(`Are you sure you want to finish the ${current_station} process and unload this slab?`),
         async () => {
@@ -150,7 +152,8 @@ const finishProcess = async (job) => {
                     args: {
                         job_card: job.name,
                         process_name: current_station_title,
-                        transfer_materials: current_station !== 'cooling'
+                        transfer_materials: current_station !== 'cooling',
+                        index: index
                     }
                 });
 
@@ -349,8 +352,8 @@ frappe.realtime.on('slab_checkout', (slab) => {
                                         <div class="text-muted small">
                                             <i class="fa fa-clock-o mr-1"></i> {{ formatDuration(job.elapsed) }}
                                         </div>
-                                        <button v-if="index === 0" class="btn btn-success btn-sm px-3"
-                                            :disabled="isProcessing" @click="finishProcess(job)">
+                                        <button v-if="!enforceQueue || index === 0" class="btn btn-success btn-sm px-3"
+                                            :disabled="isProcessing" @click="finishProcess(job, index)">
                                             <i v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></i>
                                             <i v-else class="fa fa-check mr-1"></i> {{ __('Unload Slab') }}
                                         </button>

@@ -46,7 +46,13 @@ def get_queue_data(line, station_name: str):
 
 	slabs_queue.sort(key=lambda x: (x.get("started_time") or x.get("creation"), x.get("name")))
 
-	return {"incoming_slabs": incoming_slabs, "slabs_queue": slabs_queue}
+	enforce_queue = frappe.db.get_single_value("Mahi Granites Settings", "enforce_queue")
+
+	return {
+		"incoming_slabs": incoming_slabs,
+		"slabs_queue": slabs_queue,
+		"enforce_queue": bool(enforce_queue),
+	}
 
 
 @frappe.whitelist()
@@ -77,7 +83,11 @@ def start_queue_process(slab_number: str, line: str, station_name: str):
 
 
 @frappe.whitelist()
-def finish_queue_process(job_card: str, process_name: str, transfer_materials: bool):
+def finish_queue_process(job_card: str, process_name: str, transfer_materials: bool, index: int = 0):
+	# When queue enforcement is on, only the slab at the front of the queue may be unloaded.
+	if int(index) != 0 and frappe.db.get_single_value("Mahi Granites Settings", "enforce_queue"):
+		frappe.throw(frappe._("Only the slab at the front of the queue can be unloaded."))
+
 	is_corrective_jc = frappe.db.get_value("Job Card", job_card, "is_corrective_job_card")
 	if not is_corrective_jc:
 		finish_process(job_card, process_name, transfer_materials=transfer_materials)

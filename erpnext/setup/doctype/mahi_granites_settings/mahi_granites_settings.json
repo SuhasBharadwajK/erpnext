@@ -25,6 +25,8 @@
   "curing_section",
   "min_curing_hours",
   "curing_labels",
+  "queue_section",
+  "enforce_queue",
   "shipping_tab",
   "packing_settings_section",
   "maximum_crates_per_container",
@@ -192,13 +194,24 @@
    "fieldname": "bypass_cooling",
    "fieldtype": "Check",
    "label": "Bypass Cooling"
+  },
+  {
+   "fieldname": "queue_section",
+   "fieldtype": "Section Break",
+   "label": "Queue"
+  },
+  {
+   "default": "0",
+   "fieldname": "enforce_queue",
+   "fieldtype": "Check",
+   "label": "Enforce slab queue in Cooling, Calibration, and Polishing"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-06-04 13:30:26.533506",
+ "modified": "2026-06-24 15:48:43.143718",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Mahi Granites Settings",
