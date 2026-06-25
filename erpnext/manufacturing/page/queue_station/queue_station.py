@@ -56,13 +56,15 @@ def get_queue_data(line, station_name: str):
 
 
 @frappe.whitelist()
-def start_queue_process(slab_number: str, line: str, station_name: str):
+def start_queue_process(slab_number: str, station_name: str):
 	slab = cast(Slab, frappe.get_doc("Slab", slab_number))
 	#    1. Get the job card for the current station on the given line.
-	child_lines = get_all_child_lines(line)
+	# TODO: Temp fix: Ignore line requirement while checking for job card.
+	# 				  Remove this later once the line assignment to job card is fixed.
 	job_card_result: dict[str, JobCard] = get_top_job_card_for_process(
-		station_name, child_lines if child_lines else line, False, item_code=slab.template
+		station_name, include_wip=False, item_code=slab.template
 	)
+
 	job_card = job_card_result.get("top_job_card")
 	if not job_card:
 		frappe.throw("No Job Card found")
