@@ -391,9 +391,6 @@ def create_material_transfer_stock_entry(
 
 			raise
 
-		finally:
-			frappe.db.release_savepoint("stock_entry_checkpoint")
-
 	return stock_entry
 
 

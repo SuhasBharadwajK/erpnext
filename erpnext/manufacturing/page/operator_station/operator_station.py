@@ -277,9 +277,6 @@ def finish_process(
 
 			raise
 
-		finally:
-			frappe.db.release_savepoint("mfg_stock_entry_checkpoint")
-
 	wo.update_work_order_qty()
 	wo.reload()
 	wo_status = wo.get_status()
