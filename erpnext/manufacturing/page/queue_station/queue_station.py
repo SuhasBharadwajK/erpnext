@@ -33,13 +33,11 @@ def get_queue_data(line, station_name: str):
 	# 2. Get the current slab queue (Active Job Cards)
 	# Fetch WIP job cards for the current process.
 	# We exclude "Material Transferred" as those are done but waiting for next move.
-	if line and not isinstance(line, list):
-		child_lines = get_all_child_lines(line)
-		if child_lines:
-			line = child_lines
+
+	# TODO: Temp fix: Ignore line requirement while checking for job card.
+	# 				  Remove this later once the line assignment to job card is fixed.
 	slabs_queue = get_open_job_cards(
 		process=station_name,
-		line=line,
 		include_wip=True,
 		include_material_transferred=False,  # Explicitly exclude
 	)
