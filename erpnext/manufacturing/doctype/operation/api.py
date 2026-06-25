@@ -376,16 +376,15 @@ def create_material_transfer_stock_entry(
 	stock_entry.set_stock_entry_type()
 	stock_entry.set_missing_values()
 
-	# frappe.db.savepoint("stock_entry_checkpoint")
-
 	for i in range(10):
 		try:
+			frappe.db.savepoint("stock_entry_checkpoint")
 			stock_entry.insert()
 			stock_entry.submit()
 			break
 
 		except QueryDeadlockError:
-			# frappe.db.rollback(save_point="stock_entry_checkpoint")
+			frappe.db.rollback(save_point="stock_entry_checkpoint")
 			if i <= 9:
 				time.sleep(0.5)
 				continue
@@ -393,8 +392,7 @@ def create_material_transfer_stock_entry(
 			raise
 
 		finally:
-			pass
-			# frappe.db.release_savepoint("stock_entry_checkpoint")
+			frappe.db.release_savepoint("stock_entry_checkpoint")
 
 	return stock_entry
 
