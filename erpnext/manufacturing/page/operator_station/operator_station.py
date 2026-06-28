@@ -262,18 +262,14 @@ def finish_process(
 	stock_entry_manufacture.naming_series = STOCK_ENTRY_NAMING_SERIES_MAP.get(process_name.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry_manufacture.fg_completed_qty = job_card_qty
 
-	check_point = "mfg_stock_entry_checkpoint"
-
 	for i in range(10):
 		try:
-			frappe.db.savepoint(check_point)
 			stock_entry_manufacture.insert()
 			time.sleep(0.2)
 			stock_entry_manufacture.submit()
 			break
 
 		except QueryDeadlockError:
-			frappe.db.rollback(save_point=check_point)
 			if i < 9:
 				time.sleep(0.5)
 				continue

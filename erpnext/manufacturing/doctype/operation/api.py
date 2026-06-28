@@ -378,13 +378,11 @@ def create_material_transfer_stock_entry(
 
 	for i in range(10):
 		try:
-			frappe.db.savepoint("stock_entry_checkpoint")
 			stock_entry.insert()
 			stock_entry.submit()
 			break
 
 		except QueryDeadlockError:
-			frappe.db.rollback(save_point="stock_entry_checkpoint")
 			if i <= 9:
 				time.sleep(0.5)
 				continue
