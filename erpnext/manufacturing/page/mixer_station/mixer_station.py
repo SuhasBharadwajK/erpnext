@@ -14,6 +14,7 @@ from erpnext.manufacturing.doctype.job_card.job_card import (
 	make_stock_entry as jc_make_stock_entry,
 )
 from erpnext.manufacturing.doctype.operation.api import _get_slab_template_from_bom, get_open_job_cards
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
 from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry as wo_make_stock_entry
 from erpnext.setup.doctype.employee.api import get_current_user_context
@@ -166,48 +167,45 @@ def get_mixer_ingredients(job_card):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def confirm_and_start_mixing(job_card, ingredients, bom_uom):
 	"""Create Stock Entry from mixer quantities and mark Job Card ready."""
-	try:
-		ingredients = json.loads(ingredients)
-		jc = frappe.get_doc("Job Card", job_card)
+	# Atomicity + whole-operation deadlock retry handled by @atomic_endpoint.
+	ingredients = json.loads(ingredients)
+	jc = frappe.get_doc("Job Card", job_card)
 
-		qty_by_code = {ing["item_code"]: flt(ing["qty"]) for ing in ingredients}
+	qty_by_code = {ing["item_code"]: flt(ing["qty"]) for ing in ingredients}
 
-		for row in jc.items:
-			if row.item_code in qty_by_code:
-				row.required_qty = qty_by_code[row.item_code]
-				# row.additional_ingredients_added = added_by_code.get(row.item_code, 0)
+	for row in jc.items:
+		if row.item_code in qty_by_code:
+			row.required_qty = qty_by_code[row.item_code]
+			# row.additional_ingredients_added = added_by_code.get(row.item_code, 0)
 
-		total_qty = 1
-		if jc.for_quantity != 1 and bom_uom != "Nos":
-			total_qty = sum(row.required_qty for row in jc.items if row.required_qty > 0)
-			jc.for_quantity = total_qty
-			jc.additional_ingredients_added = 1
-			jc.save(ignore_permissions=True)
+	total_qty = 1
+	if jc.for_quantity != 1 and bom_uom != "Nos":
+		total_qty = sum(row.required_qty for row in jc.items if row.required_qty > 0)
+		jc.for_quantity = total_qty
+		jc.additional_ingredients_added = 1
+		jc.save(ignore_permissions=True)
 
-		se = jc_make_stock_entry(job_card)
-		if not se.items:
-			frappe.throw(_("No remaining quantity to transfer for Job Card {0}.").format(job_card))
+	se = jc_make_stock_entry(job_card)
+	if not se.items:
+		frappe.throw(_("No remaining quantity to transfer for Job Card {0}.").format(job_card))
 
-		se.insert()
-		se.submit()
+	se.insert()
+	se.submit()
 
-		start_mixing(job_card)
+	start_mixing(job_card)
 
-		return {
-			"stock_entry": se.name,
-			"total_for_quantity": total_qty,
-			"additional_ingredients_added": jc.additional_ingredients_added,
-			"status": jc.status,
-			"mixer_started": jc.job_started,
-			"mixer_start_time": jc.started_time,
-			"current_time": jc.current_time,
-		}
-
-	except Exception as e:
-		frappe.db.rollback()
-		frappe.throw(f"Failed to confirm and start mixing: {e}")
+	return {
+		"stock_entry": se.name,
+		"total_for_quantity": total_qty,
+		"additional_ingredients_added": jc.additional_ingredients_added,
+		"status": jc.status,
+		"mixer_started": jc.job_started,
+		"mixer_start_time": jc.started_time,
+		"current_time": jc.current_time,
+	}
 
 
 # def confirm_materials(job_card, ingredients, bom_uom):
@@ -266,6 +264,7 @@ def start_mixing(job_card):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def finish_mixing(job_card):
 	"""Complete the Job Card when mixing is finished."""
 	jc = frappe.get_doc("Job Card", job_card)
@@ -332,6 +331,7 @@ def finish_mixing(job_card):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def quick_add_raw_materials(job_card, raw_material, qty):
 	"""Dialog → Creates Doctype record + Stock Entry."""
 	add_doc = frappe.new_doc("Add Raw Materials")
@@ -393,8 +393,6 @@ def quick_add_raw_materials(job_card, raw_material, qty):
 	jc.flags.ignore_validate = True
 	jc.flags.ignore_validate_update_after_submit = True
 	jc.save(ignore_permissions=True)
-
-	frappe.db.commit()
 
 	return {
 		"success": True,
@@ -553,11 +551,11 @@ def get_all_mixers(production_line=None, mixing_queue=None):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def assign_mixer_to_job_card(job_card, mixer):
 	jc = frappe.get_doc("Job Card", job_card)
 	jc.mixer_number = mixer
 	jc.save(ignore_permissions=True)
-	frappe.db.commit()
 
 	return {"status": "success", "mixer_number": jc.mixer_number}
 

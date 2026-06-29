@@ -5,14 +5,14 @@ import frappe
 
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard, make_stock_entry
 from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP
-from erpnext.manufacturing.doctype.operation.api import get_open_job_cards
+from erpnext.manufacturing.doctype.operation.api import get_open_job_cards, resolve_job_card_for_slab
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.production_line.production_line import get_all_child_lines
 from erpnext.manufacturing.doctype.slab.api import get_slabs_for
 from erpnext.manufacturing.doctype.slab.slab import Slab
 from erpnext.manufacturing.doctype.work_order import work_order
 from erpnext.manufacturing.page.operator_station.operator_station import (
 	finish_process,
-	get_top_job_card_for_process,
 	start_process,
 )
 
@@ -54,23 +54,17 @@ def get_queue_data(line, station_name: str):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def start_queue_process(slab_number: str, station_name: str):
 	slab = cast(Slab, frappe.get_doc("Slab", slab_number))
-	#    1. Get the job card for the current station on the given line.
-	# TODO: Temp fix: Ignore line requirement while checking for job card.
-	# 				  Remove this later once the line assignment to job card is fixed.
-	job_card_result: dict[str, JobCard] = get_top_job_card_for_process(
-		station_name, include_wip=False, item_code=slab.template
-	)
 
-	job_card = job_card_result.get("top_job_card")
+	#    1. Resolve the job card that belongs to THIS slab (its own production
+	#       plan + template), locking it so a concurrent station cannot claim
+	#       the same card, then bind it 1:1 to the slab.
+	job_card = resolve_job_card_for_slab(slab, station_name, for_update=True, include_wip=False)
 	if not job_card:
 		frappe.throw("No Job Card found")
-	job_card_name = job_card.name if job_card else None
-	# if not job_card:
-	# 	frappe.throw("No Job Card found for the process.")
-
-	# job_card = cast(JobCard, job_card)
+	job_card_name = job_card["name"]
 
 	#    2. Start the job card.
 	#    3. Move the slab to the current station.
@@ -83,6 +77,7 @@ def start_queue_process(slab_number: str, station_name: str):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def finish_queue_process(job_card: str, process_name: str, transfer_materials: bool, index: int = 0):
 	# When queue enforcement is on, only the slab at the front of the queue may be unloaded.
 	if int(index) != 0 and frappe.db.get_single_value("Mahi Granites Settings", "enforce_queue"):

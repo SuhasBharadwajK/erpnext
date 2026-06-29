@@ -11,6 +11,7 @@ from erpnext.manufacturing.doctype.oven_operation.oven_operation import OvenOper
 from erpnext.manufacturing.doctype.preliminary_quality_check.preliminary_quality_check import (
 	PreliminaryQualityCheck,
 )
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.slab.slab import ALLOWED_STAGES, Slab
 from erpnext.manufacturing.doctype.slab_batch_number.api import delete_batch_numbers_older_than
 from erpnext.manufacturing.doctype.slab_batch_number.slab_batch_number import SlabBatchNumber
@@ -109,10 +110,13 @@ def checkout_slab(slab_number: str, publish_event=True):
 	slab.save(ignore_permissions=True)
 
 	if publish_event:
-		frappe.publish_realtime("slab_checkout", slab)
+		# Notify clients only after the transaction commits, so they never see a
+		# checkout that later rolls back.
+		frappe.publish_realtime("slab_checkout", slab, after_commit=True)
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def re_press_slab(slab_number: str):
 	slab: Slab = frappe.get_doc("Slab", slab_number)  # pyright: ignore[reportAssignmentType]
 	if slab.status != "Pressing":
@@ -188,7 +192,8 @@ def move_slab_to(
 	slab.save(ignore_permissions=True)
 
 	if publish_event:
-		frappe.publish_realtime("slab_move", slab)
+		# Notify clients only after the transaction commits.
+		frappe.publish_realtime("slab_move", slab, after_commit=True)
 
 
 @frappe.whitelist()
@@ -467,11 +472,16 @@ def _get_batch_number_from_list(today: date, fiscal_year: FiscalYear, create_and
 	start_day_factor = 1 if last_shift.does_span_next_day and now_time.hour < shift_end_hour else 0
 	today -= timedelta(days=start_day_factor)
 
-	# Get today's batch number.
+	# Get today's batch number. The for_update lock makes this a locking read:
+	# when the row is absent InnoDB sets a gap lock on the date range, blocking
+	# a concurrent operator from inserting a second batch for the same day until
+	# this (atomic) transaction commits. Prevents duplicate batches at day
+	# rollover.
 	slab_batch_number: str = frappe.db.get_value(  # pyright: ignore[reportAssignmentType]
 		"Slab Batch Number",
 		filters={"date": today.strftime("%Y-%m-%d")},
 		fieldname="name",
+		for_update=True,
 	)
 
 	fy_start_date: datetime = fiscal_year.year_start_date  # pyright: ignore[reportAssignmentType]
@@ -510,19 +520,23 @@ def _get_slab_number(batch: str, line: str) -> int:
 
 	batch_prefix = batch.split("/")[0]
 
-	mahi_granites_settings: MahiGranitesSettings = frappe.get_doc("Mahi Granites Settings")  # pyright: ignore[reportAssignmentType]
-	slab_seed = next(
-		(
-			seed.seed
-			for seed in mahi_granites_settings.slab_seeds
-			if seed.line == line and seed.seed_month and seed.seed_month.strftime("%Y-%m-%d") == month_start  # pyright: ignore[reportAttributeAccessIssue]
-		),
-		0,
-	)  # pyright: ignore
+	# Lock the seed row for this line/month with SELECT ... FOR UPDATE so two
+	# concurrent distribution operators cannot read the same seed and mint
+	# duplicate slab numbers. The lock is held until the enclosing (atomic)
+	# transaction commits. The read-modify-write is done directly on the child
+	# row, scoped to THIS line (the previous version incremented every line's
+	# seed for the month, which was inconsistent with the per-line lookup).
+	seed_row = frappe.db.get_value(
+		"Slab Seed",
+		{"parent": "Mahi Granites Settings", "line": line, "seed_month": month_start},
+		["name", "seed"],
+		as_dict=True,
+		for_update=True,
+	)
 
-	if slab_seed:
-		_update_slab_seed()
-		return slab_seed + 1
+	if seed_row and seed_row.seed:
+		frappe.db.set_value("Slab Seed", seed_row.name, "seed", seed_row.seed + 1)
+		return seed_row.seed + 1
 
 	slab_count: int = (
 		frappe.db.count(
@@ -535,20 +549,3 @@ def _get_slab_number(batch: str, line: str) -> int:
 	) + 1
 
 	return slab_count or 0
-
-
-def _update_slab_seed():
-	today = date.today()
-	curr_month = today.month
-	curr_year = today.year
-
-	month_start = f"{curr_year}-{curr_month:02d}-01"
-
-	# Increment slab seed for the current month if it is already set
-	mahi_granites_settings: MahiGranitesSettings = frappe.get_doc("Mahi Granites Settings")  # pyright: ignore[reportAssignmentType]
-	for seed in mahi_granites_settings.slab_seeds:
-		if seed.line and seed.seed_month and seed.seed_month.strftime("%Y-%m-%d") == month_start:  # pyright: ignore[reportAttributeAccessIssue]
-			seed.seed += 1
-			seed.save(ignore_permissions=True)
-
-	mahi_granites_settings.save(ignore_permissions=True)
