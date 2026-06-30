@@ -467,11 +467,16 @@ def _get_batch_number_from_list(today: date, fiscal_year: FiscalYear, create_and
 	start_day_factor = 1 if last_shift.does_span_next_day and now_time.hour < shift_end_hour else 0
 	today -= timedelta(days=start_day_factor)
 
-	# Get today's batch number.
+	# Get today's batch number. The for_update lock makes this a locking read:
+	# when the row is absent InnoDB sets a gap lock on the date range, blocking
+	# a concurrent operator from inserting a second batch for the same day until
+	# this (atomic) transaction commits. Prevents duplicate batches at day
+	# rollover.
 	slab_batch_number: str = frappe.db.get_value(  # pyright: ignore[reportAssignmentType]
 		"Slab Batch Number",
 		filters={"date": today.strftime("%Y-%m-%d")},
 		fieldname="name",
+		for_update=True,
 	)
 
 	fy_start_date: datetime = fiscal_year.year_start_date  # pyright: ignore[reportAssignmentType]
@@ -503,6 +508,26 @@ def _get_batch_number_from_list(today: date, fiscal_year: FiscalYear, create_and
 
 def _get_slab_number(batch: str, line: str) -> int:
 	today = date.today()
+
+	# Roll the date back one day while the last shift of the day is still running
+	# past midnight, so a slab minted in the early hours is attributed to the day
+	# (and month) the shift started — consistent with _get_batch_number_from_list.
+	attendance_shifts: list[AttendanceShift] = frappe.db.get_all(
+		"Attendance Shift",
+		fields=["name", "start_time", "end_time", "does_span_next_day"],
+		limit=1,
+		order_by="start_time DESC",
+	)
+
+	last_shift = attendance_shifts[0] if attendance_shifts else None
+	if not last_shift:
+		raise frappe.ValidationError("No attendance shifts found.")
+
+	now_time = datetime.now()
+	shift_end_hour = last_shift.end_time.seconds / 3600  # pyright: ignore[reportAttributeAccessIssue]
+	start_day_factor = 1 if last_shift.does_span_next_day and now_time.hour < shift_end_hour else 0
+	today -= timedelta(days=start_day_factor)
+
 	curr_month = today.month
 	curr_year = today.year
 
@@ -510,19 +535,23 @@ def _get_slab_number(batch: str, line: str) -> int:
 
 	batch_prefix = batch.split("/")[0]
 
-	mahi_granites_settings: MahiGranitesSettings = frappe.get_doc("Mahi Granites Settings")  # pyright: ignore[reportAssignmentType]
-	slab_seed = next(
-		(
-			seed.seed
-			for seed in mahi_granites_settings.slab_seeds
-			if seed.line == line and seed.seed_month and seed.seed_month.strftime("%Y-%m-%d") == month_start  # pyright: ignore[reportAttributeAccessIssue]
-		),
-		0,
-	)  # pyright: ignore
+	# Lock the seed row for this line/month with SELECT ... FOR UPDATE so two
+	# concurrent distribution operators cannot read the same seed and mint
+	# duplicate slab numbers. The lock is held until the enclosing (atomic)
+	# transaction commits. The read-modify-write is done directly on the child
+	# row, scoped to THIS line (the previous version incremented every line's
+	# seed for the month, which was inconsistent with the per-line lookup).
+	seed_row = frappe.db.get_value(
+		"Slab Seed",
+		{"parent": "Mahi Granites Settings", "line": line, "seed_month": month_start},
+		["name", "seed"],
+		as_dict=True,
+		for_update=True,
+	)
 
-	if slab_seed:
-		_update_slab_seed()
-		return slab_seed + 1
+	if seed_row and seed_row.seed:
+		frappe.db.set_value("Slab Seed", seed_row.name, "seed", seed_row.seed + 1)
+		return seed_row.seed + 1
 
 	slab_count: int = (
 		frappe.db.count(
@@ -535,20 +564,3 @@ def _get_slab_number(batch: str, line: str) -> int:
 	) + 1
 
 	return slab_count or 0
-
-
-def _update_slab_seed():
-	today = date.today()
-	curr_month = today.month
-	curr_year = today.year
-
-	month_start = f"{curr_year}-{curr_month:02d}-01"
-
-	# Increment slab seed for the current month if it is already set
-	mahi_granites_settings: MahiGranitesSettings = frappe.get_doc("Mahi Granites Settings")  # pyright: ignore[reportAssignmentType]
-	for seed in mahi_granites_settings.slab_seeds:
-		if seed.line and seed.seed_month and seed.seed_month.strftime("%Y-%m-%d") == month_start:  # pyright: ignore[reportAttributeAccessIssue]
-			seed.seed += 1
-			seed.save(ignore_permissions=True)
-
-	mahi_granites_settings.save(ignore_permissions=True)
