@@ -549,7 +549,7 @@ def _get_slab_number(batch: str, line: str) -> int:
 		for_update=True,
 	)
 
-	if seed_row and seed_row.seed:
+	if seed_row and seed_row.seed >= 0:
 		frappe.db.set_value("Slab Seed", seed_row.name, "seed", seed_row.seed + 1)
 		return seed_row.seed + 1
 
