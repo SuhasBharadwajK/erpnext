@@ -313,7 +313,7 @@ frappe.realtime.on('slab_checkout', (slab) => {
                                     <!-- <button class="btn btn-outline-secondary btn-sm mr-2 px-3" @click="skipSlab">
                                         <i class="fa fa-step-forward mr-1"></i> {{ __('Skip') }}
                                     </button> -->
-                                    <button class="btn btn-primary btn-sm px-4" :disabled="isProcessing"
+                                    <button id="queue-accept-start-btn" class="btn btn-primary btn-sm px-4" :disabled="isProcessing"
                                         @click="startProcess(currentIncomingSlab)">
                                         <i v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></i>
                                         <i v-else class="fa fa-play mr-1"></i> {{ __('Accept & Start') }}
@@ -352,7 +352,8 @@ frappe.realtime.on('slab_checkout', (slab) => {
                                         <div class="text-muted small">
                                             <i class="fa fa-clock-o mr-1"></i> {{ formatDuration(job.elapsed) }}
                                         </div>
-                                        <button v-if="!enforceQueue || index === 0" class="btn btn-success btn-sm px-3"
+                                        <button v-if="!enforceQueue || index === 0" :id="'queue-unload-slab-btn-' + job.name"
+                                            class="btn btn-success btn-sm px-3"
                                             :disabled="isProcessing" @click="finishProcess(job, index)">
                                             <i v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></i>
                                             <i v-else class="fa fa-check mr-1"></i> {{ __('Unload Slab') }}

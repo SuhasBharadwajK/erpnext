@@ -645,7 +645,7 @@ async function fetchPollingData(fetch_queue=1, fetch_status=1, fetch_mixers=1) {
 
 function updateMixersList(newMixers) {
     if (!newMixers) return;
-    
+
     for (const nm of newMixers) {
         if (nm.status === 'Finished') {
             localStorage.setItem(`mixer_status_${nm.name}`, 'Finished');
@@ -842,6 +842,7 @@ function selectJobCard(name) {
 
                             <div class="mb-3">
                                 <button
+                                    id="mixer-confirm-start-btn"
                                     :disabled="!isMixerSelected || !allAdditionalIngredientsAdded || mixingStarted || isProcessing"
                                     :class="!isMixerSelected || !allAdditionalIngredientsAdded || mixingStarted || isProcessing ? 'btn-disabled-pointer' : ''"
                                     class="btn btn-success btn-block py-3" @click="confirmAndStartMixing">
@@ -864,7 +865,7 @@ function selectJobCard(name) {
                                 {{ formattedMixingTime }}
                             </div>
                             <div class="d-flex flex-column gap-2 justify-content-center mb-3">
-                                <button class="btn btn-success flex-fill" :disabled="isProcessing"
+                                <button id="mixer-finish-discharge-btn" class="btn btn-success flex-fill" :disabled="isProcessing"
                                     @click="finishAndDischarge">
                                     <span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
                                     <span v-else class="fa fa-check mr-1"></span>
@@ -893,7 +894,7 @@ function selectJobCard(name) {
                                 {{ getDisplayQty.toLocaleString() }}
                             </div>
                             <div class="d-flex flex-column gap-2 justify-content-center mb-3">
-                                <button v-if="!transferSuccess.value" :disabled="!getCanTransfer || isProcessing"
+                                <button id="mixer-transfer-btn" v-if="!transferSuccess.value" :disabled="!getCanTransfer || isProcessing"
                                     :class="['btn btn-lg flex-fill', (getCanTransfer && !isProcessing) ? 'btn-warning' : 'btn-secondary']"
                                     @click="transferToFGWarehouse">
                                     <span v-if="isProcessing" class="fa fa-spinner fa-spin mr-2"></span>

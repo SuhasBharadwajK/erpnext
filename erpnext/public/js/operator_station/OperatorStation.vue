@@ -740,7 +740,7 @@ async function selectSlab(slab) {
 						</div>
 
 						<div class="text-center mb-2" v-if="processReady && !isPaused">
-							<button class="btn btn-success py-3 px-4" :disabled="isProcessing" @click="startOperation">
+							<button id="operator-start-job-btn" class="btn btn-success py-3 px-4" :disabled="isProcessing" @click="startOperation">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1 pr-2"></span>
 								<span v-else class="fa fa-play mr-1 pr-2"></span>{{ __('Start Job') }}
 							</button>
@@ -754,17 +754,17 @@ async function selectSlab(slab) {
 						</div>
 
 						<div class="text-center mb-2" v-if="processStarted">
-							<button class="btn btn-info py-3 px-4 mr-5" :disabled="isProcessing"
+							<button id="operator-finish-job-btn" class="btn btn-info py-3 px-4 mr-5" :disabled="isProcessing"
 								@click="finishOperation" v-if="!isPaused">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
 								<span v-else class="fa fa-check-square-o mr-2"></span>{{ __('Finish Job') }}
 							</button>
-							<button class="btn btn-warning py-3 px-4 mr-5" v-if="isPressing && !isPaused"
+							<button id="operator-repress-btn" class="btn btn-warning py-3 px-4 mr-5" v-if="isPressing && !isPaused"
 								:disabled="isProcessing" @click="repressSlab">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
 								<span v-else class="fa fa-retweet mr-1"></span>{{ __('Re-press') }}
 							</button>
-							<button class="btn btn-success py-3 px-4" v-if="isPaused" :disabled="isProcessing"
+							<button id="operator-resume-job-btn" class="btn btn-success py-3 px-4" v-if="isPaused" :disabled="isProcessing"
 								@click="confirmResume">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1 pr-2"></span>
 								<span v-else class="fa fa-play mr-1 pr-2"></span>{{ __('Resume Job') }}
@@ -772,7 +772,7 @@ async function selectSlab(slab) {
 							<!-- <button class="btn btn-warning py-3 px-4 mr-5" @click="haltJob">
 							<span class="fa fa-pause-circle-o mr-1"></span>{{ __('Halt Job') }}
 						</button> -->
-							<button class="btn btn-primary py-3 px-4" @click="confirmPause" :disabled="isProcessing"
+							<button id="operator-pause-job-btn" class="btn btn-primary py-3 px-4" @click="confirmPause" :disabled="isProcessing"
 								v-if="!isPaused">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1 pr-2"></span>
 								<span v-else class="fa fa-pause mr-2"></span>{{ __('Pause Job') }}
