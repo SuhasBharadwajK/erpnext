@@ -212,8 +212,8 @@ async function loadData() {
             // productionLine.value = jc.production_line;
             productionLine.value = currentLine.value;
             if (jc.bom_no) {
-                const bom_elements = jc.bom_no.split("-");
-                batchNo.value = `${bom_elements[1]}-${bom_elements[2]}`.trim();
+				const slab_colour = jc.item_name.split(" ")[0];
+                batchNo.value = slab_colour;
             }
         }
 
@@ -761,11 +761,11 @@ function selectJobCard(name) {
                         <div class="text-danger font-weight-bold">{{ jobCard }}</div>
                     </div>
 
-                    <div class="ml-4">
+                    <!-- <div class="ml-4">
                         <span class="badge badge-pill badge-light border px-3 py-2" style="font-size:1rem">
                             {{ phase }}
                         </span>
-                    </div>
+                    </div> -->
                 </div> <!-- /header -->
 
                 <div class="d-flex" v-if="jobCard">
