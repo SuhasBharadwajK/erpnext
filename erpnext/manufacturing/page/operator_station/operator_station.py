@@ -262,14 +262,29 @@ def finish_process(
 	stock_entry_manufacture.naming_series = STOCK_ENTRY_NAMING_SERIES_MAP.get(process_name.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry_manufacture.fg_completed_qty = job_card_qty
 
+
+	check_point = "mfg_stock_entry_checkpoint"
+	check_point_created = False
+
+	# Deadlocks are handled at the endpoint level by @atomic_endpoint, which
+	# rolls back and retries the whole operation; a fragment-level retry here
+	# would leave the job card / work order writes committed-in-progress.
+	# stock_entry_manufacture.insert()
+	# stock_entry_manufacture.submit()
 	for i in range(10):
 		try:
+			frappe.db.savepoint(check_point)
+			check_point_created = True
 			stock_entry_manufacture.insert()
 			time.sleep(0.2)
 			stock_entry_manufacture.submit()
 			break
 
 		except QueryDeadlockError:
+			if check_point_created:
+				frappe.db.rollback(save_point=check_point)
+				check_point_created = False
+
 			if i < 9:
 				time.sleep(0.5)
 				continue

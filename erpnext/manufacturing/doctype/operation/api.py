@@ -376,13 +376,25 @@ def create_material_transfer_stock_entry(
 	stock_entry.set_stock_entry_type()
 	stock_entry.set_missing_values()
 
+	# Deadlocks are handled at the endpoint level by run_atomic(), which rolls
+	# back and retries the whole operation. A fragment-level retry here would
+	# leave the earlier writes (job card / work order) committed-in-progress.
+	# stock_entry.insert()
+	# stock_entry.submit()
+
+	check_point = "trf_stock_entry_checkpoint"
 	for i in range(10):
 		try:
+			frappe.db.savepoint(check_point)
+			check_point_created = True
 			stock_entry.insert()
 			stock_entry.submit()
 			break
 
 		except QueryDeadlockError:
+			if check_point_created:
+				frappe.db.rollback(save_point=check_point)
+				check_point_created = False
 			if i <= 9:
 				time.sleep(0.5)
 				continue
