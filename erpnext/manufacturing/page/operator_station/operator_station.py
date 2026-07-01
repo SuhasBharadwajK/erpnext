@@ -1,8 +1,7 @@
-import time
 from copy import deepcopy
 
 import frappe
-from frappe import QueryDeadlockError, _
+from frappe import _
 from frappe import utils as frappe_utils
 from frappe.utils import flt
 
@@ -17,7 +16,12 @@ from erpnext.manufacturing.doctype.manufacturing_process.constants import (
 	MFG_PROCESS_MAP,
 	MIXING_PROCESS,
 )
-from erpnext.manufacturing.doctype.operation.api import get_open_job_cards, transfer_to_next_process
+from erpnext.manufacturing.doctype.operation.api import (
+	get_open_job_cards,
+	resolve_job_card_for_slab,
+	transfer_to_next_process,
+)
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint, lock_for_update
 from erpnext.manufacturing.doctype.production_line.production_line import (
 	ProductionLine,
 	get_all_child_lines,
@@ -58,6 +62,7 @@ STOCK_ENTRY_NAMING_SERIES_MAP = {
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def start_process(
 	job_card,
 	slab_name="",
@@ -139,6 +144,7 @@ def start_process(
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def pause_process(job_card_name):
 	"""Pause the Job Card when mixing is paused."""
 	job_card: JobCard = frappe.get_doc("Job Card", job_card_name)  # pyright: ignore[reportAssignmentType]
@@ -163,6 +169,7 @@ def pause_process(job_card_name):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def resume_process(job_card_name):
 	"""Resume the Job Card when mixing is resumed."""
 	job_card: JobCard = frappe.get_doc("Job Card", job_card_name)  # pyright: ignore[reportAssignmentType]
@@ -188,6 +195,7 @@ def resume_process(job_card_name):
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def finish_process(
 	job_card,
 	process_name,
@@ -231,6 +239,13 @@ def finish_process(
 
 	work_order = jc.work_order
 	wo: WorkOrder = frappe.get_doc("Work Order", work_order)  # pyright: ignore[reportAssignmentType]
+
+	# Acquire the contended rows in a consistent global order (Production Plan
+	# -> Work Order) before any stock posting, so concurrent stations serialise
+	# instead of forming a deadlock cycle on tabProduction Plan / tabWork Order.
+	lock_for_update("Production Plan", wo.production_plan)
+	lock_for_update("Work Order", work_order)
+
 	wo.material_transferred_for_manufacturing = job_card_qty
 	wo.flags.ignore_validate_update_after_submit = True
 	wo.save()
@@ -262,34 +277,11 @@ def finish_process(
 	stock_entry_manufacture.naming_series = STOCK_ENTRY_NAMING_SERIES_MAP.get(process_name.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry_manufacture.fg_completed_qty = job_card_qty
 
-
-	check_point = "mfg_stock_entry_checkpoint"
-	check_point_created = False
-
 	# Deadlocks are handled at the endpoint level by @atomic_endpoint, which
 	# rolls back and retries the whole operation; a fragment-level retry here
 	# would leave the job card / work order writes committed-in-progress.
-	# stock_entry_manufacture.insert()
-	# stock_entry_manufacture.submit()
-	for i in range(10):
-		try:
-			frappe.db.savepoint(check_point)
-			check_point_created = True
-			stock_entry_manufacture.insert()
-			time.sleep(0.2)
-			stock_entry_manufacture.submit()
-			break
-
-		except QueryDeadlockError:
-			if check_point_created:
-				frappe.db.rollback(save_point=check_point)
-				check_point_created = False
-
-			if i < 9:
-				time.sleep(0.5)
-				continue
-
-			raise
+	stock_entry_manufacture.insert()
+	stock_entry_manufacture.submit()
 
 	wo.update_work_order_qty()
 	wo.reload()
@@ -433,20 +425,31 @@ def get_next_work_item(process, line="", include_wip=True, slab_template: str | 
 	if isinstance(include_wip, str):
 		include_wip = include_wip.lower() == "true"
 
-	job_card_data = _get_job_card_for_line_and_process(line, process, include_wip, item_code=slab_template, work_orders=work_orders)
-	job_card = job_card_data["top_job_card"]
+	job_card_data = _get_job_card_for_line_and_process(
+		line, process, include_wip, item_code=slab_template, work_orders=work_orders
+	)
 	available_job_cards_count = job_card_data["available_job_cards_count"]
 
-	# is_wip = job_card and job_card.status == "Work In Progress"
-	slab = frappe.get_doc("Slab", job_card.slab) if job_card and job_card.slab else None  # pyright: ignore[reportAssignmentType]
-
+	# Pick the waiting slab FIRST, then resolve the job card that belongs to that
+	# slab's own production plan / template. This prevents pairing a slab with a
+	# same-template card from a different slab or work order.
 	slabs_for_process = get_slabs_for(
 		line, process, limit=1000
 	)  # Giving an arbitrarily high limit to make sure that the exact number of slabs is fetched.
 
-	slabs_for_process = [slab for slab in slabs_for_process if job_card and job_card.production_item.startswith(slab.template)]
-	slab = slab if slab else (slabs_for_process[0] if slabs_for_process else None)
+	if slab_template:
+		slabs_for_process = [s for s in slabs_for_process if s.template == slab_template]
+
 	available_slabs_count = len(slabs_for_process)
+	slab = slabs_for_process[0] if slabs_for_process else None
+
+	if slab:
+		job_card = resolve_job_card_for_slab(slab, process, include_wip=include_wip) or job_card_data[
+			"top_job_card"
+		]
+	else:
+		# No slab waiting (e.g. Mixing / Distribution): surface an open card.
+		job_card = job_card_data["top_job_card"]
 
 	return {
 		"slab": slab,
@@ -519,20 +522,31 @@ def get_top_job_card_for_process(
 
 def update_slab_number_on_job_card(job_card_name, slab_name, slab_template):
 	jc: JobCard = frappe.get_doc("Job Card", job_card_name)  # pyright: ignore[reportAssignmentType]
-	jc.slab = slab_name
-	jc.slab_template = slab_template
-	jc.save(ignore_permissions=True)
-	jc.reload()
+
+	if jc.slab and jc.slab != slab_name:
+        # The card was already bound (e.g. by transfer_to_next_process) to a
+        # different slab than the one being started. Refuse rather than silently
+		# rebind, so a mismatched (card, slab) pair can never take material.
+		frappe.throw(
+			f"Job Card {job_card_name} is already bound to slab {jc.slab}; "
+			f"cannot start it for slab {slab_name}."
+		)
+
+	# Only set the slab if it's not already set (e.g. by transfer_to_next_process)
+	# to avoid unnecessary database writes.
+	if not jc.slab:
+		jc.slab = slab_name
+		jc.slab_template = slab_template
+		jc.save(ignore_permissions=True)
+		jc.reload()
 
 
 @frappe.whitelist()
-def get_job_card_for_slab(slab_name: str, process_name: str, item_code):
+def get_job_card_for_slab(slab_name: str, process_name: str, item_code=None):
+	# Resolve the card that belongs to THIS slab (its own production plan and
+	# template), never a same-template card from a different slab / work order.
 	slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
-	job_card_data = _get_job_card_for_line_and_process(
-		slab.line, process_name, include_wip=True, item_code=item_code
-	)
-	job_card = job_card_data["top_job_card"]
-	return job_card
+	return resolve_job_card_for_slab(slab, process_name, include_wip=True)
 
 
 def _get_mixing_slab_history(job_card_name: str):

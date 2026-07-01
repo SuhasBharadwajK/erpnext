@@ -2,18 +2,16 @@ import frappe
 
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard
 from erpnext.manufacturing.doctype.operation.api import transfer_to_next_process
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.slab.api import checkout_slab
 from erpnext.manufacturing.doctype.slab.slab import Slab
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def unload_slab_to_trimming(slab_number: str):
-	try:
-		finish_curing(slab_number)
-		frappe.db.commit()
-	except Exception:
-		frappe.db.rollback()
-		raise
+	# Atomicity + whole-operation deadlock retry handled by @atomic_endpoint.
+	finish_curing(slab_number)
 
 
 def finish_curing(slab_number: str):

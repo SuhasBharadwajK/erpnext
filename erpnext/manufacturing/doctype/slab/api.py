@@ -7,16 +7,11 @@ from frappe.query_builder.functions import Count
 from frappe.types import DF
 
 from erpnext.accounts.doctype.fiscal_year.fiscal_year import FiscalYear
-from erpnext.manufacturing.doctype.oven_operation.oven_operation import OvenOperation
-from erpnext.manufacturing.doctype.preliminary_quality_check.preliminary_quality_check import (
-	PreliminaryQualityCheck,
-)
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.slab.slab import ALLOWED_STAGES, Slab
 from erpnext.manufacturing.doctype.slab_batch_number.api import delete_batch_numbers_older_than
 from erpnext.manufacturing.doctype.slab_batch_number.slab_batch_number import SlabBatchNumber
 from erpnext.manufacturing.doctype.slab_history.slab_history import SlabHistory
-from erpnext.manufacturing.doctype.slab_quality_report.api import create_slab_quality_report
-from erpnext.manufacturing.doctype.slab_quality_report.slab_quality_report import SlabQualityReport
 from erpnext.setup.doctype.attendance_shift.attendance_shift import AttendanceShift
 from erpnext.setup.doctype.mahi_granites_settings.mahi_granites_settings import MahiGranitesSettings
 
@@ -109,10 +104,13 @@ def checkout_slab(slab_number: str, publish_event=True):
 	slab.save(ignore_permissions=True)
 
 	if publish_event:
-		frappe.publish_realtime("slab_checkout", slab)
+		# Notify clients only after the transaction commits, so they never see a
+		# checkout that later rolls back.
+		frappe.publish_realtime("slab_checkout", slab, after_commit=True)
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def re_press_slab(slab_number: str):
 	slab: Slab = frappe.get_doc("Slab", slab_number)  # pyright: ignore[reportAssignmentType]
 	if slab.status != "Pressing":
@@ -188,7 +186,8 @@ def move_slab_to(
 	slab.save(ignore_permissions=True)
 
 	if publish_event:
-		frappe.publish_realtime("slab_move", slab)
+		# Notify clients only after the transaction commits.
+		frappe.publish_realtime("slab_move", slab, after_commit=True)
 
 
 @frappe.whitelist()

@@ -4,6 +4,7 @@ import frappe
 
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard
 from erpnext.manufacturing.doctype.operation.api import get_open_job_cards
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.oven.oven import Oven
 from erpnext.manufacturing.doctype.oven_operation.oven_operation import OvenOperation
 from erpnext.manufacturing.doctype.oven_rack.oven_rack import OvenRack
@@ -64,6 +65,7 @@ def get_slab_and_job_card_for_oven(process, line="", include_wip=True, slab_temp
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def load_slab_into_oven(oven_op: str, line: str, job_card_name: str, slab_template: str):
 	oven_operation = json.loads(oven_op)
 
@@ -83,39 +85,36 @@ def load_slab_into_oven(oven_op: str, line: str, job_card_name: str, slab_templa
 
 	now_date_time = frappe.utils.now_datetime()  # pyright: ignore
 
-	try:
-		# Start the Job Card
-		start_process(job_card_name, slab_name, slab_template, "Heating")
-		slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
+	# Atomicity + deadlock retry are handled by @atomic_endpoint; start_process
+	# is reentrant under it and shares this transaction.
+	# Start the Job Card
+	start_process(job_card_name, slab_name, slab_template, "Heating")
+	slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
 
-		new_oven_operation.in_time = now_date_time
-		new_oven_operation.job_card = job_card_name
-		new_oven_operation.save()
+	new_oven_operation.in_time = now_date_time
+	new_oven_operation.job_card = job_card_name
+	new_oven_operation.save()
 
-		heating_slab_history_item: SlabHistory = next(h for h in slab.slab_history if h.station == "Heating")
+	heating_slab_history_item: SlabHistory = next(h for h in slab.slab_history if h.station == "Heating")
 
-		if heating_slab_history_item.out_time is not None:
-			raise Exception("Slab is in an invalid state")
+	if heating_slab_history_item.out_time is not None:
+		raise Exception("Slab is in an invalid state")
 
-		heating_slab_history_item.oven_params = new_oven_operation.name
-		heating_slab_history_item.save()
+	heating_slab_history_item.oven_params = new_oven_operation.name
+	heating_slab_history_item.save()
 
-		oven_rack.current_slab = slab_name
-		oven_rack.current_slab_template = slab.template
-		oven_rack.start_time = now_date_time
-		oven_rack.status = "Heating"
-		oven_rack.save()
-
-		frappe.db.commit()
-	except Exception:
-		frappe.db.rollback()
-		raise
+	oven_rack.current_slab = slab_name
+	oven_rack.current_slab_template = slab.template
+	oven_rack.start_time = now_date_time
+	oven_rack.status = "Heating"
+	oven_rack.save()
 
 	oven_rack = frappe.get_doc("Oven Rack", rack_name)  # pyright: ignore[reportAssignmentType]
 	return oven_rack
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def unload_slab_from_oven(rack_name: str, slab_name: str, slab_template: str, values: str):
 	# values is a JSON string containing slab_top_temp, slab_bottom_temp, remarks
 	data = json.loads(values)
@@ -151,35 +150,30 @@ def unload_slab_from_oven(rack_name: str, slab_name: str, slab_template: str, va
 	rack.current_slab_template = None
 	rack.start_time = None
 
-	try:
-		rack.save()
+	# Atomicity + deadlock retry are handled by @atomic_endpoint; finish_process
+	# is reentrant under it and shares this transaction.
+	rack.save()
 
-		op.submit()
-		op.save()
+	op.submit()
+	op.save()
 
-		# Complete the Job Card
-		if op.job_card:
-			finish_process(op.job_card, "Heating", should_stop_machine=False)
-			# Check if any of the racks in the oven are in use
-			oven: Oven = frappe.get_doc("Oven", rack.parent)  # pyright: ignore[reportAssignmentType]
+	# Complete the Job Card
+	if op.job_card:
+		finish_process(op.job_card, "Heating", should_stop_machine=False)
+		# Check if any of the racks in the oven are in use
+		oven: Oven = frappe.get_doc("Oven", rack.parent)  # pyright: ignore[reportAssignmentType]
 
-			# Stop the oven only if all the racks are idle.
-			is_in_use = False
-			for rack in oven.racks:
-				if rack.status == "Heating":
-					is_in_use = True
-					break
+		# Stop the oven only if all the racks are idle.
+		is_in_use = False
+		for rack in oven.racks:
+			if rack.status == "Heating":
+				is_in_use = True
+				break
 
-			if not is_in_use:
-				stop_machine("Heating", oven.line, None)
+		if not is_in_use:
+			stop_machine("Heating", oven.line, None)
 
-			_move_slab_to_cooling_if_enabled(slab_name)
-
-		frappe.db.commit()
-
-	except Exception:
-		frappe.db.rollback()
-		raise
+		_move_slab_to_cooling_if_enabled(slab_name)
 
 	return {"rack": rack}
 
