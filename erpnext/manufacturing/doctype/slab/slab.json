@@ -346,13 +346,14 @@
    "fieldtype": "Check",
    "in_filter": 1,
    "in_standard_filter": 1,
-   "label": "Is 3cm to 2cm"
+   "label": "Is 3cm to 2cm",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-24 22:46:06.727339",
+ "modified": "2026-07-02 22:17:04.039907",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Slab",
