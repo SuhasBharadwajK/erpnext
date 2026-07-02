@@ -24,7 +24,7 @@ def get_queue_data(line, station_name: str):
 		"Warehouse", {"mfg_process_type": station_name, "production_line": line}, "is_standalone"
 	)
 	# If it is, set the limit to 50, else set it to 1.
-	limit = 200 if is_warehouse_standalone else 1
+	limit = 500 if is_warehouse_standalone else 1
 
 	# 1. Get Incoming Slabs (Ready for the current station)
 	incoming_slabs = get_slabs_for(line, station_name, limit=limit)
