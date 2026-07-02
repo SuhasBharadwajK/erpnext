@@ -30,8 +30,9 @@ class AssetDepreciationSchedule(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from erpnext.assets.doctype.depreciation_schedule.depreciation_schedule import DepreciationSchedule
 		from frappe.types import DF
+
+		from erpnext.assets.doctype.depreciation_schedule.depreciation_schedule import DepreciationSchedule
 
 		amended_from: DF.Link | None
 		asset: DF.Link
@@ -349,7 +350,7 @@ class AssetDepreciationSchedule(Document):
 			if date_of_disposal and getdate(schedule_date) >= getdate(date_of_disposal):
 				from_date = add_months(
 					getdate(asset_doc.available_for_use_date),
-					(asset_doc.opening_number_of_booked_depreciations * row.frequency_of_depreciation),
+					round((asset_doc.opening_number_of_booked_depreciations * row.frequency_of_depreciation), 1),
 				)
 				if is_last_day_of_the_month(getdate(asset_doc.available_for_use_date)):
 					from_date = get_last_day(from_date)
@@ -404,16 +405,17 @@ class AssetDepreciationSchedule(Document):
 					from_date = get_last_day(
 						add_months(
 							getdate(asset_doc.available_for_use_date),
-							(
+							round(
 								(self.opening_number_of_booked_depreciations - 1)
-								* row.frequency_of_depreciation
+								* row.frequency_of_depreciation,
+								1,
 							),
 						)
 					)
 				else:
 					from_date = add_months(
 						getdate(add_days(asset_doc.available_for_use_date, -1)),
-						(self.opening_number_of_booked_depreciations * row.frequency_of_depreciation),
+						round(self.opening_number_of_booked_depreciations * row.frequency_of_depreciation, 1),
 					)
 				depreciation_amount, days, months = _get_pro_rata_amt(
 					row,
@@ -429,9 +431,10 @@ class AssetDepreciationSchedule(Document):
 					# In case of increase_in_asset_life, the asset.to_date is already set on asset_repair submission
 					asset_doc.to_date = add_months(
 						asset_doc.available_for_use_date,
-						(n + self.opening_number_of_booked_depreciations)
-						* cint(row.frequency_of_depreciation),
+						round((n + self.opening_number_of_booked_depreciations)
+								* cint(row.frequency_of_depreciation), 1),
 					)
+
 					if is_last_day_of_the_month(getdate(asset_doc.available_for_use_date)):
 						asset_doc.to_date = get_last_day(asset_doc.to_date)
 
@@ -591,9 +594,10 @@ def _check_is_pro_rata(asset_doc, row, wdv_or_dd_non_yearly=False):
 		prev_depreciation_start_date = get_last_day(
 			add_months(
 				row.depreciation_start_date,
-				(row.frequency_of_depreciation * -1) * asset_doc.opening_number_of_booked_depreciations,
+				round((row.frequency_of_depreciation * -1) * asset_doc.opening_number_of_booked_depreciations, 1),
 			)
 		)
+
 		from_date = asset_doc.available_for_use_date
 		days = date_diff(prev_depreciation_start_date, from_date) + 1
 		total_days = get_total_days(prev_depreciation_start_date, row.frequency_of_depreciation)
@@ -627,7 +631,7 @@ def _get_modified_available_for_use_date(asset_doc, row, wdv_or_dd_non_yearly=Fa
 	if asset_doc.opening_number_of_booked_depreciations > 0:
 		from_date = add_months(
 			asset_doc.available_for_use_date,
-			(asset_doc.opening_number_of_booked_depreciations * row.frequency_of_depreciation) - 1,
+			round((asset_doc.opening_number_of_booked_depreciations * row.frequency_of_depreciation), 1) - 1,
 		)
 		if is_last_day_of_the_month(row.depreciation_start_date):
 			return add_days(get_last_day(from_date), 1)
@@ -770,11 +774,11 @@ def get_daily_depr_amount(asset, row, schedule_idx, amount):
 					get_last_day(
 						add_months(
 							row.depreciation_start_date,
-							(
+							round((
 								row.frequency_of_depreciation
 								* (asset.opening_number_of_booked_depreciations + 1)
 							)
-							* -1,
+							* -1, 1),
 						),
 					),
 					1,
