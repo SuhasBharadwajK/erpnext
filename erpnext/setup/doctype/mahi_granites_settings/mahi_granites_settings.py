@@ -20,6 +20,7 @@ class MahiGranitesSettings(Document):
 		from frappe.types import DF
 
 		annex_d_addr: DF.SmallText | None
+		authorised_signatory: DF.Link
 		bypass_cooling: DF.Check
 		curing_labels: DF.Table[CuringLabel]
 		enforce_queue: DF.Check

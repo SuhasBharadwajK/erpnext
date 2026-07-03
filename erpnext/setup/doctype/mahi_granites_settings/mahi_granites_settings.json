@@ -34,7 +34,8 @@
   "slab_sales_allowance",
   "export_compliance_section",
   "annex_d_addr",
-  "column_break_zcbd"
+  "column_break_zcbd",
+  "authorised_signatory"
  ],
  "fields": [
   {
@@ -205,13 +206,20 @@
    "fieldname": "enforce_queue",
    "fieldtype": "Check",
    "label": "Enforce slab queue in Cooling, Calibration, and Polishing"
+  },
+  {
+   "fieldname": "authorised_signatory",
+   "fieldtype": "Link",
+   "label": "Authorised Signatory",
+   "options": "Contact",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-06-24 15:48:43.143718",
+ "modified": "2026-07-03 17:46:16.368458",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Mahi Granites Settings",
