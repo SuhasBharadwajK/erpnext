@@ -204,6 +204,7 @@ def finish_process(
 	slab_number=None,
 	slab_grade=None,
 	publish_slab_event=True,
+	work_orders=None,
 ):
 	"""Complete the Job Card when mixing is finished."""
 
@@ -291,7 +292,9 @@ def finish_process(
 		checkout_slab(jc.slab, publish_event=publish_slab_event)
 
 	if transfer_materials:
-		transfer_to_next_process(job_card, work_order, job_card_qty, mixer_number=jc.mixer_number)
+		transfer_to_next_process(
+			job_card, work_order, job_card_qty, mixer_number=jc.mixer_number, work_orders=work_orders
+		)
 
 	if should_stop_machine:
 		stop_machine(process_name, jc.production_line, None)

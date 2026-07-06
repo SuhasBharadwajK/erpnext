@@ -7,10 +7,8 @@ from erpnext.manufacturing.doctype.job_card.job_card import JobCard, make_stock_
 from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP
 from erpnext.manufacturing.doctype.operation.api import get_open_job_cards, resolve_job_card_for_slab
 from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
-from erpnext.manufacturing.doctype.production_line.production_line import get_all_child_lines
 from erpnext.manufacturing.doctype.slab.api import get_slabs_for
 from erpnext.manufacturing.doctype.slab.slab import Slab
-from erpnext.manufacturing.doctype.work_order import work_order
 from erpnext.manufacturing.page.operator_station.operator_station import (
 	finish_process,
 	start_process,
