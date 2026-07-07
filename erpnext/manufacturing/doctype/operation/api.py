@@ -29,7 +29,13 @@ MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP = {
 @frappe.whitelist()
 @atomic_endpoint
 def transfer_to_next_process(
-	current_job_card, current_work_order, qty=None, process=None, mixer_number=None, work_orders=None
+	current_job_card,
+	current_work_order,
+	qty=None,
+	process=None,
+	mixer_number=None,
+	work_orders=None,
+	line: str | None = None,
 ):
 	"""Transfer FG from Mixing → Next Process Source Warehouse.
 
@@ -67,7 +73,7 @@ def transfer_to_next_process(
 	next_wo_filters = {
 		"docstatus": ["<", 2],
 		"production_item": ["like", f"%{slab_template}%"],
-		"production_line": wo.production_line,
+		"production_line": line or wo.production_line,
 	}
 
 	if work_orders:
