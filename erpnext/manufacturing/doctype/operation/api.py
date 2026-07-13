@@ -466,6 +466,7 @@ def resolve_job_card_for_slab(
 	include_paused: bool = False,
 	work_orders: list[str] | None = None,
 	line: str | list | None = None,
+	ignore_production_plan: bool = True,
 ):
 	"""Authoritative, slab-aware resolver for the next Job Card of a slab.
 
@@ -484,7 +485,7 @@ def resolve_job_card_for_slab(
 
 	# An explicit work-order list (e.g. from the bulk importer) takes precedence;
 	# otherwise scope to the slab's own production plan.
-	production_plan = None if work_orders else _get_slab_production_plan(slab)
+	production_plan = None if ignore_production_plan or work_orders else _get_slab_production_plan(slab)
 
 	# Line scope: explicit override, else the slab's child line, else its parent
 	# line expanded to child lines (job cards carry child lines). Previously a

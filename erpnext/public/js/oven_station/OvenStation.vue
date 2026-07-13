@@ -265,7 +265,7 @@ async function confirmLoad() {
                     args: {
                         oven_op: ovenOperation.value,
                         line: work_context.assigned_line,
-                        job_card_name: jobCardNumber.value || selectedSlab.value?.current_job_card,
+                        job_card_name: jobCardNumber.value || "",
                         slab_template: selectedSlab.value?.template,
                     }
                 })
