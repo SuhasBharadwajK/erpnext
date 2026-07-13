@@ -18,6 +18,7 @@ from erpnext.manufacturing.doctype.manufacturing_process.constants import (
 )
 from erpnext.manufacturing.doctype.operation.api import (
 	get_open_job_cards,
+	item_matches_template,
 	resolve_job_card_for_slab,
 	transfer_to_next_process,
 )
@@ -453,9 +454,20 @@ def get_next_work_item(process, line="", include_wip=True, slab_template: str | 
 	slab = slabs_for_process[0] if slabs_for_process else None
 
 	if slab:
-		job_card = resolve_job_card_for_slab(slab, process, include_wip=include_wip) or job_card_data[
-			"top_job_card"
-		]
+		job_card = resolve_job_card_for_slab(slab, process, include_wip=include_wip)
+		if not job_card:
+			# Fall back to the line's top card ONLY if it could plausibly belong
+			# to this slab: same template (anchored) and not bound to another
+			# slab. The old unconditional fallback paired the slab with the
+			# earliest open card of ANY item on the line, which the operator
+			# would then start.
+			top = job_card_data["top_job_card"]
+			if (
+				top
+				and item_matches_template(top.get("production_item"), slab.template)
+				and (not top.get("slab") or top.get("slab") == slab.name)
+			):
+				job_card = top
 	else:
 		# No slab waiting (e.g. Mixing / Distribution): surface an open card.
 		job_card = job_card_data["top_job_card"]
@@ -531,6 +543,20 @@ def get_top_job_card_for_process(
 
 def update_slab_number_on_job_card(job_card_name, slab_name, slab_template):
 	jc: JobCard = frappe.get_doc("Job Card", job_card_name)  # pyright: ignore[reportAssignmentType]
+
+	# Derive the template from the slab itself when the caller didn't pass one,
+	# so the item guard below cannot be skipped by omission.
+	if not slab_template and slab_name:
+		slab_template = frappe.db.get_value("Slab", slab_name, "template")
+
+	if jc.production_item and not item_matches_template(jc.production_item, slab_template):
+		# Last-line defence for every pairing path (station fallbacks, stale or
+		# client-supplied cards): a card producing a different item must never
+		# be bound to this slab.
+		frappe.throw(
+			f"Job Card {job_card_name} produces {jc.production_item}, which does not match "
+			f"slab {slab_name}'s template {slab_template}; refusing to bind them."
+		)
 
 	if jc.slab and jc.slab != slab_name:
         # The card was already bound (e.g. by transfer_to_next_process) to a

@@ -3,7 +3,10 @@ import json
 import frappe
 
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard
-from erpnext.manufacturing.doctype.operation.api import get_open_job_cards
+from erpnext.manufacturing.doctype.operation.api import (
+	item_matches_template,
+	resolve_job_card_for_slab,
+)
 from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.oven.oven import Oven
 from erpnext.manufacturing.doctype.oven_operation.oven_operation import OvenOperation
@@ -14,7 +17,6 @@ from erpnext.manufacturing.doctype.slab.slab import Slab
 from erpnext.manufacturing.doctype.slab_history.slab_history import SlabHistory
 from erpnext.manufacturing.page.operator_station.operator_station import (
 	finish_process,
-	get_top_job_card_for_process,
 	start_process,
 	stop_machine,
 )
@@ -52,15 +54,19 @@ def get_slab_and_job_card_for_oven(process, line="", include_wip=True, slab_temp
 		}
 
 	slab = slabs_for_process[0]
-	job_cards = get_open_job_cards(
-		process, line=line, include_wip=include_wip, include_paused=False, limit=1, item_code=slab.template
+	# Resolve the card that belongs to THIS slab (its own production plan and
+	# template, never a card bound to another slab). The old top-of-queue query
+	# could pair the slab with a same-template card from a different plan.
+	slab_doc: Slab = frappe.get_doc("Slab", slab.name)  # pyright: ignore[reportAssignmentType]
+	job_card = resolve_job_card_for_slab(
+		slab_doc, process, include_wip=include_wip, work_orders=work_orders, line=line
 	)
 
 	return {
 		"slab": slab,
 		"available_slabs_count": len(slabs_for_process),
-		"job_card": job_cards[0] if job_cards else None,
-		"available_job_cards_count": len(job_cards),
+		"job_card": job_card,
+		"available_job_cards_count": 1 if job_card else 0,
 	}
 
 
@@ -76,9 +82,29 @@ def load_slab_into_oven(oven_op: str, line: str, job_card_name: str, slab_templa
 	slab_name = new_oven_operation.slab or ""
 	oven_rack: OvenRack = frappe.get_doc("Oven Rack", rack_name)  # pyright: ignore[reportAssignmentType]
 
+	slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
+
+	# The client-sent card can be stale (fetched earlier, seeded from the URL, or
+	# the slab's previous-stage card). Honour it only if it is an open Heating
+	# card that produces this slab's template and is not bound to another slab;
+	# otherwise resolve the slab's own card server-side.
+	if job_card_name:
+		jc_info = frappe.db.get_value(
+			"Job Card", job_card_name, ["production_item", "slab", "status", "docstatus"], as_dict=True
+		)
+		is_valid = (
+			jc_info
+			and jc_info.docstatus == 0
+			and jc_info.status in ("Open", "Material Transferred")
+			and (not jc_info.slab or jc_info.slab == slab_name)
+			and item_matches_template(jc_info.production_item, slab.template)
+		)
+		if not is_valid:
+			job_card_name = ""
+
 	if not job_card_name:
-		job_card_data = _get_oven_job_card_(line, include_wip=False, item_code=slab_template)
-		job_card_name = job_card_data.name if job_card_data else ""
+		resolved_card = resolve_job_card_for_slab(slab, "Heating", for_update=True, include_wip=False)
+		job_card_name = resolved_card["name"] if resolved_card else ""
 
 	if not job_card_name:
 		raise Exception(f"No job card found for slab {slab_name}")
@@ -88,8 +114,9 @@ def load_slab_into_oven(oven_op: str, line: str, job_card_name: str, slab_templa
 	# Atomicity + deadlock retry are handled by @atomic_endpoint; start_process
 	# is reentrant under it and shares this transaction.
 	# Start the Job Card
-	start_process(job_card_name, slab_name, slab_template, "Heating")
-	slab: Slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
+	start_process(job_card_name, slab_name, slab.template, "Heating")
+	# Re-fetch: start_process moved the slab and appended to its history.
+	slab = frappe.get_doc("Slab", slab_name)  # pyright: ignore[reportAssignmentType]
 
 	new_oven_operation.in_time = now_date_time
 	new_oven_operation.job_card = job_card_name
@@ -176,15 +203,6 @@ def unload_slab_from_oven(rack_name: str, slab_name: str, slab_template: str, va
 		_move_slab_to_cooling_if_enabled(slab_name)
 
 	return {"rack": rack}
-
-
-def _get_oven_job_card_(line: str, include_wip=True, item_code=None):
-	child_lines = get_all_child_lines(line)
-	jc_data: dict = get_top_job_card_for_process(
-		"Heating", child_lines if child_lines else line, include_wip=include_wip, item_code=item_code
-	)
-
-	return jc_data["top_job_card"]
 
 
 def _move_slab_to_cooling_if_enabled(slab_name: str):

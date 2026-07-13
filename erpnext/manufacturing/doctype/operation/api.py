@@ -9,6 +9,7 @@ from erpnext.manufacturing.doctype.job_card.constants import LOW_PRIORITY
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard
 from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP, MIXING_PROCESS
 from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
+from erpnext.manufacturing.doctype.production_line.production_line import get_all_child_lines
 from erpnext.manufacturing.doctype.slab.slab import Slab
 from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
 from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
@@ -24,6 +25,19 @@ MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP = {
 	"polishing": "MAT-STE-POLI-TRF-.YYYY.-",
 	"quality check": "MAT-STE-QUAL-TRF-.YYYY.-",
 }
+
+
+def item_matches_template(production_item: str | None, slab_template: str | None) -> bool:
+	"""True when ``production_item`` is produced from ``slab_template``: either the
+	bare template itself (terminal process) or an intermediary ``"{template} - {stage}"``.
+
+	Anchored on the full template followed by the ``" - "`` separator, so a template
+	that is a substring of another (e.g. a ``-J`` size inside ``-JUMBO``) can no
+	longer cross-match the way the old unanchored ``LIKE %template%`` filters did.
+	"""
+	if not production_item or not slab_template:
+		return False
+	return production_item == slab_template or production_item.startswith(f"{slab_template} - ")
 
 
 @frappe.whitelist()
@@ -70,10 +84,16 @@ def transfer_to_next_process(
 
 	slab_template = _get_slab_template_from_bom(bom_doc)
 
+	production_line = line or wo.production_line
+
+	# The slab being carried forward is the one bound to the current job card.
+	# (Empty for Mixing -> Distribution, where the slab does not exist yet.)
+	slab_no = frappe.db.get_value("Job Card", current_job_card, "slab")
+
 	next_wo_filters = {
 		"docstatus": ["<", 2],
 		"production_item": ["like", f"%{slab_template}%"],
-		"production_line": line or wo.production_line,
+		"production_line": production_line,
 	}
 
 	if work_orders:
@@ -84,44 +104,77 @@ def transfer_to_next_process(
 	next_wos = frappe.db.get_list(
 		"Work Order",
 		filters=next_wo_filters,
-		fields=["name"],
+		fields=["name", "production_item"],
+		order_by="creation asc",
 		ignore_permissions=True,
 	)
 
-	wo_names = [wo.name for wo in next_wos]
-	wo_ops = frappe.db.get_list(
-		"Work Order Operation",
-		filters={
-			"parent": ["in", wo_names],
-			"operation": ["=", next_process],
-		},
-		fields=["parent"],
-		ignore_permissions=True,
+	# Anchored template match: the old unanchored LIKE let one template pick up
+	# a Work Order of another template that merely contains it as a substring.
+	wo_names = [w.name for w in next_wos if item_matches_template(w.production_item, slab_template)]
+
+	wo_ops = (
+		frappe.db.get_list(
+			"Work Order Operation",
+			filters={
+				"parent": ["in", wo_names],
+				"operation": ["=", next_process],
+			},
+			fields=["parent"],
+			ignore_permissions=True,
+		)
+		if wo_names
+		else []
 	)
 
-	next_wo = wo_ops[0].parent if wo_ops else None
+	# Preserve the creation-asc order of the Work Orders (wo_ops carries no
+	# meaningful order of its own).
+	wo_ops_parents = {op.parent for op in wo_ops}
+	candidate_wos = [name for name in wo_names if name in wo_ops_parents]
+
+	next_wo = None
+	if slab_no and len(candidate_wos) > 1:
+		# Several sibling WOs match this process/template: prefer the one whose
+		# open card is already bound to this slab, so the transfer lands on the
+		# slab's own chain instead of an arbitrary sibling's.
+		next_wo = frappe.db.get_value(
+			"Job Card",
+			{"work_order": ["in", candidate_wos], "slab": slab_no, "status": "Open", "docstatus": 0},
+			"work_order",
+		)
+
+	if not next_wo:
+		next_wo = candidate_wos[0] if candidate_wos else None
 
 	if not next_wo:
 		fallback_filters = {
 			"item_name": ["like", f"%{next_process}%"],
 			"docstatus": ["<", 2],
 			"production_item": ["like", f"%{slab_template}%"],
+			"production_line": production_line,
 		}
+
 		if work_orders:
 			fallback_filters["name"] = ["in", work_orders]
 		else:
 			fallback_filters["production_plan"] = wo.production_plan
 
-		next_wo = frappe.db.get_value("Work Order", fallback_filters, "name")
+		fallback_wos = frappe.db.get_list(
+			"Work Order",
+			filters=fallback_filters,
+			fields=["name", "production_item"],
+			order_by="creation asc",
+			ignore_permissions=True,
+		)
+		next_wo = next(
+			(w.name for w in fallback_wos if item_matches_template(w.production_item, slab_template)),
+			None,
+		)
 
 	if not next_wo:
 		frappe.throw(f"Next WO for '{next_process}' not found.")
 
 	next_wo_doc = frappe.get_doc("Work Order", next_wo)
-
-	# The slab being carried forward is the one bound to the current job card.
-	# (Empty for Mixing -> Distribution, where the slab does not exist yet.)
-	slab_no = frappe.db.get_value("Job Card", current_job_card, "slab")
 	open_job_card = _select_open_job_card_for_next_wo(next_wo, slab_no)
 
 	if not open_job_card:
@@ -289,8 +342,20 @@ def get_open_job_cards(
 	if slab:
 		filters["slab"] = slab
 
-	if slab_template:
-		filters["production_item"] = ["like", f"{slab_template} - %"]
+	# Anchored template match: production items are either the bare template
+	# (terminal process) or "{template} - {stage}". The old unanchored
+	# `%item_code%` LIKE let one template match a card of another template that
+	# contains it as a substring; it also silently overwrote the slab_template
+	# filter when both were passed.
+	template = item_code or slab_template
+	or_filters = (
+		[
+			["production_item", "=", template],
+			["production_item", "like", f"{template} - %"],
+		]
+		if template
+		else None
+	)
 
 	if exclude_job_cards:
 		if isinstance(exclude_job_cards, list):
@@ -304,9 +369,6 @@ def get_open_job_cards(
 		else:
 			filters["production_line"] = line
 
-	if item_code:
-		filters["production_item"] = ["like", f"%{item_code}%"]
-
 	limit = limit or (
 		9999999
 		if not is_mixing
@@ -318,6 +380,7 @@ def get_open_job_cards(
 		"Job Card",
 		limit=limit,
 		filters=filters,
+		or_filters=or_filters,
 		fields=[
 			"name",
 			"work_order",
@@ -402,7 +465,7 @@ def resolve_job_card_for_slab(
 	include_wip: bool = True,
 	include_paused: bool = False,
 	work_orders: list[str] | None = None,
-	line: str | None = None,
+	line: str | list | None = None,
 ):
 	"""Authoritative, slab-aware resolver for the next Job Card of a slab.
 
@@ -423,9 +486,17 @@ def resolve_job_card_for_slab(
 	# otherwise scope to the slab's own production plan.
 	production_plan = None if work_orders else _get_slab_production_plan(slab)
 
+	# Line scope: explicit override, else the slab's child line, else its parent
+	# line expanded to child lines (job cards carry child lines). Previously a
+	# slab without a child_line lost the line filter entirely.
+	resolve_line = line or slab.child_line
+	if not resolve_line and slab.line:
+		child_lines = get_all_child_lines(slab.line)
+		resolve_line = child_lines if child_lines else slab.line
+
 	candidates = get_open_job_cards(
 		process,
-		line=line or slab.child_line,
+		line=resolve_line,
 		include_wip=include_wip,
 		include_material_transferred=True,
 		include_paused=include_paused,
