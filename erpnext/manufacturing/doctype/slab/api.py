@@ -12,6 +12,7 @@ from erpnext.manufacturing.doctype.slab.slab import ALLOWED_STAGES, Slab
 from erpnext.manufacturing.doctype.slab_batch_number.api import delete_batch_numbers_older_than
 from erpnext.manufacturing.doctype.slab_batch_number.slab_batch_number import SlabBatchNumber
 from erpnext.manufacturing.doctype.slab_history.slab_history import SlabHistory
+from erpnext.manufacturing.doctype.slab_quality_grade.slab_quality_grade import SlabQualityGrade
 from erpnext.setup.doctype.attendance_shift.attendance_shift import AttendanceShift
 from erpnext.setup.doctype.mahi_granites_settings.mahi_granites_settings import MahiGranitesSettings
 
@@ -251,6 +252,57 @@ def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=Fal
 	)
 
 	return slabs
+
+
+LOOKUP_ALLOWED_STAGES = ALLOWED_STAGES[: ALLOWED_STAGES.index("Quality Check") + 1]
+
+
+@frappe.whitelist()
+def search_slabs_for_lookup(txt: str = "", limit: int = 20) -> list[Slab]:
+	if not txt:
+		return []
+
+	return frappe.db.get_list(
+		"Slab",
+		ignore_permissions=True,
+		filters={
+			"name": ["like", f"%{txt}%"],
+			"status": ["in", LOOKUP_ALLOWED_STAGES],
+		},
+		fields=["name", "template", "status", "is_cur_stage_complete"],
+		order_by="modified desc",
+		limit=limit,
+	)
+
+
+@frappe.whitelist()
+def get_slab_lookup_details(slab_number: str):
+	slab: Slab = frappe.get_doc("Slab", slab_number)  # pyright: ignore[reportAssignmentType]
+	if slab.status not in LOOKUP_ALLOWED_STAGES:
+		frappe.throw("Slab has moved past the Quality Check stage.")
+
+	grade: SlabQualityGrade = (  # pyright: ignore[reportAssignmentType]
+		frappe.db.get_value("Slab Quality Grade", slab.grade, ["code", "color"], as_dict=True)  # pyright: ignore[reportArgumentType]
+		if slab.grade
+		else None
+	)
+
+	return {
+		"name": slab.name,
+		"template": slab.template,
+		"status": slab.status,
+		"is_cur_stage_complete": slab.is_cur_stage_complete,
+		"grade": grade.code if grade else None,
+		"grade_color": grade.color if grade else None,
+		"slab_history": [
+			{
+				"station": history.station,
+				"in_time": history.in_time,
+				"out_time": history.out_time,
+			}
+			for history in slab.slab_history
+		],
+	}
 
 
 @frappe.whitelist()
