@@ -96,8 +96,16 @@ def transfer_to_next_process(
 		"production_line": production_line,
 	}
 
+	# Station-created chains carry a slab_group_id identifying exactly the Work Orders
+	# built for this one slab. It is a tighter scope than the plan and is the only one
+	# available for chains that have no Production Plan; plan-based chains (and every
+	# job card predating slab_group_id) fall back to the plan.
+	slab_group_id = wo.get("slab_group_id")
+
 	if work_orders:
 		next_wo_filters["name"] = ["in", work_orders]
+	elif slab_group_id:
+		next_wo_filters["slab_group_id"] = slab_group_id
 	else:
 		next_wo_filters["production_plan"] = wo.production_plan
 
@@ -156,6 +164,8 @@ def transfer_to_next_process(
 
 		if work_orders:
 			fallback_filters["name"] = ["in", work_orders]
+		elif slab_group_id:
+			fallback_filters["slab_group_id"] = slab_group_id
 		else:
 			fallback_filters["production_plan"] = wo.production_plan
 
@@ -292,6 +302,8 @@ def get_open_job_cards(
 	work_orders:list[str] | None=None,
 	slab=None,
 	production_plan=None,
+	slab_group_id=None,
+	include_archived=False,
 ):
 	is_mixing = process == "Mixing"
 	if is_mixing:
@@ -325,6 +337,21 @@ def get_open_job_cards(
 			"docstatus": ["=", "0"],
 			"workstation": ws_query,
 		}
+
+	# Archived cards are parked deliberately (e.g. a mixing remainder too small to
+	# transfer onward) and must never be handed back out as work.
+	if not include_archived:
+		filters["is_archived"] = 0
+
+	# Scope to the Work Orders of one station-created slab chain. Job Card has no direct
+	# slab_group_id, so resolve through Work Order, same as the plan scope below.
+	if slab_group_id and not work_orders:
+		work_orders = frappe.get_all(
+			"Work Order",
+			filters={"slab_group_id": slab_group_id, "docstatus": ["<", 2]},
+			pluck="name",
+			ignore_permissions=True,
+		) or ["__none__"]
 
 	# Scope to a production plan by resolving its work orders (Job Card has no
 	# direct production_plan field).
@@ -454,7 +481,30 @@ def _get_slab_production_plan(slab) -> str | None:
 	if not work_order:
 		return None
 
-	return frappe.db.get_value("Work Order", work_order, "production_plan")
+	return frappe.db.get_value("Work Order", work_order, "production_plan")  # pyright: ignore[reportReturnType]
+
+
+def _get_slab_group_id(slab) -> str | None:
+	"""The slab chain id (``Work Order.slab_group_id``) that owns ``slab``, if any.
+
+	Set only on chains built on demand by the mixer station; plan-created chains and
+	everything predating the field return None and stay on production-plan scoping.
+	"""
+	jc_name = slab.current_job_card
+	if not jc_name:
+		for history in reversed(slab.slab_history or []):
+			if history.job_card_number:
+				jc_name = history.job_card_number
+				break
+
+	if not jc_name:
+		return None
+
+	work_order = frappe.db.get_value("Job Card", jc_name, "work_order")
+	if not work_order:
+		return None
+
+	return frappe.db.get_value("Work Order", work_order, "slab_group_id")  # pyright: ignore[reportReturnType]
 
 
 def resolve_job_card_for_slab(
@@ -481,11 +531,17 @@ def resolve_job_card_for_slab(
 	overrides ``slab.child_line`` for the line filter below.
 	"""
 	if isinstance(slab, str):
-		slab = frappe.get_doc("Slab", slab)
+		slab = frappe.get_doc("Slab", slab)  # pyright: ignore[reportAssignmentType]
 
-	# An explicit work-order list (e.g. from the bulk importer) takes precedence;
-	# otherwise scope to the slab's own production plan.
-	production_plan = None if ignore_production_plan or work_orders else _get_slab_production_plan(slab)
+	# An explicit work-order list (e.g. from the bulk importer) takes precedence.
+	# Otherwise prefer the slab's own chain id, which pins candidates to exactly the
+	# Work Orders built for this slab; fall back to its production plan.
+	slab_group_id = None if work_orders else _get_slab_group_id(slab)
+	production_plan = (
+		None
+		if (ignore_production_plan or work_orders or slab_group_id)
+		else _get_slab_production_plan(slab)
+	)
 
 	# Line scope: explicit override, else the slab's child line, else its parent
 	# line expanded to child lines (job cards carry child lines). Previously a
@@ -503,6 +559,7 @@ def resolve_job_card_for_slab(
 		include_paused=include_paused,
 		item_code=slab.template,
 		production_plan=production_plan,
+		slab_group_id=slab_group_id,
 		work_orders=work_orders,
 	)
 
@@ -578,7 +635,7 @@ def create_material_transfer_stock_entry(
 	stock_entry.job_card = open_job_card  # pyright: ignore # No job card for inter-process transfer
 	stock_entry.company = company
 	stock_entry.fg_completed_qty = transfer_qty
-	stock_entry.previous_job_card = current_job_card
+	stock_entry.previous_job_card = current_job_card  # pyright: ignore[reportAttributeAccessIssue]
 
 	stock_entry.append(
 		"items",

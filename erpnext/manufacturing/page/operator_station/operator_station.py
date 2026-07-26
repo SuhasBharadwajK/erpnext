@@ -334,10 +334,17 @@ def get_next_process_bom_qty(current_work_order: str):
 	if not next_process:
 		frappe.throw(_("No next process found after {0}").format(current_process))
 
+	# Station-created chains have no Production Plan; every Work Order built for one
+	# slab shares a slab_group_id instead.
+	slab_group_id = wo.get("slab_group_id")
+	chain_filter = (
+		{"slab_group_id": slab_group_id} if slab_group_id else {"production_plan": wo.production_plan}
+	)
+
 	next_wos = frappe.db.get_list(
 		"Work Order",
 		filters={
-			"production_plan": wo.production_plan,
+			**chain_filter,
 			"docstatus": ["<", 2],
 		},
 		fields=["name"],
