@@ -195,6 +195,80 @@ def resume_process(job_card_name):
 	}
 
 
+def _make_rework_stock_entry(jc: JobCard, wo: WorkOrder, qty: float) -> StockEntry:
+	"""Convert a reworked slab back into this stage's output, without re-producing it.
+
+	Mirrors exactly what the Manufacture entry does for a normal card -- consume the
+	inputs staged in the WIP warehouse, put this stage's item into the finished
+	warehouse -- but as a Repack, so the Work Order's produced quantity is untouched.
+
+	That movement is not optional: the next stage pulls this stage's output from its own
+	warehouse, so without it a repolish/recalibration leaves the following corrective
+	card with nothing to transfer in.
+	"""
+	source_rows = [row for row in (jc.items or []) if row.item_code]
+	if not source_rows:
+		frappe.throw(
+			_("Job Card {0} has no required items, so the reworked slab cannot be converted back to {1}.").format(
+				jc.name, wo.production_item
+			)
+		)
+
+	wip_warehouse = jc.wip_warehouse or wo.wip_warehouse
+	# Job cards in this flow are one slab each, but scale anyway so the entry stays
+	# correct if a card ever completes a partial quantity.
+	scale = (flt(qty) / flt(jc.for_quantity)) if flt(jc.for_quantity) else 1
+
+	stock_entry: StockEntry = frappe.new_doc("Stock Entry")  # pyright: ignore[reportAssignmentType]
+	stock_entry.stock_entry_type = "Repack"
+	stock_entry.purpose = "Repack"
+	stock_entry.company = wo.company
+
+	# Quantities are kept in stock UOM throughout (conversion factor 1); set_missing_values
+	# does not fill the UOM fields in, and Stock Entry rejects a row without them.
+	for row in source_rows:
+		stock_entry.append(
+			"items",
+			{
+				"item_code": row.item_code,
+				"qty": flt(row.required_qty) * scale or flt(qty),
+				"s_warehouse": row.source_warehouse or wip_warehouse,
+				"uom": row.stock_uom,
+				"stock_uom": row.stock_uom,
+				"conversion_factor": 1,
+				"slab_no": jc.slab,
+				"to_slab_no": jc.slab,
+			},
+		)
+
+	stock_entry.append(
+		"items",
+		{
+			"item_code": wo.production_item,
+			"qty": flt(qty),
+			"t_warehouse": wo.fg_warehouse,
+			"is_finished_item": 1,
+			"uom": wo.stock_uom,
+			"stock_uom": wo.stock_uom,
+			"conversion_factor": 1,
+			"slab_no": jc.slab,
+			"to_slab_no": jc.slab,
+		},
+	)
+
+	# Without this the entry inherits the Stock Entry default series, which labels a
+	# calibration/polishing rework as a mixing manufacture ("MAT-STE-MIXN-MFG-").
+	stock_entry.naming_series = "MAT-STE-.YYYY.-"  # pyright: ignore[reportAttributeAccessIssue]
+
+	stock_entry.set_missing_values()
+
+	# Deadlocks are handled at the endpoint level by @atomic_endpoint.
+	stock_entry.insert()
+	stock_entry.submit()
+
+	return stock_entry
+
+
 @frappe.whitelist()
 @atomic_endpoint
 def finish_process(
@@ -254,37 +328,48 @@ def finish_process(
 	wo.save()
 	wo.reload()
 
-	se_doc = wo_make_stock_entry(work_order, "Manufacture", qty=job_card_qty)
-	if isinstance(se_doc, dict):
-		stock_entry_manufacture: StockEntry = frappe.get_doc(se_doc)  # pyright: ignore[reportAssignmentType]
+	# A corrective job card is rework on a slab that already exists -- recalibrating or
+	# repolishing does not yield a second slab. The Work Order's output was already
+	# posted by the original card, so a second Manufacture entry would double-count
+	# production; on a one-slab chain it also trips ERPNext's duplicate-entry guard
+	# ("Stock Entries already created for Work Order ...") and blocks the rework
+	# entirely. The material still has to move, though, so the rework posts a Repack
+	# instead: same conversion, no production accounting.
+	stock_entry_manufacture: StockEntry | None = None
+	if jc.is_corrective_job_card:
+		stock_entry_manufacture = _make_rework_stock_entry(jc, wo, job_card_qty)
 	else:
-		stock_entry_manufacture = se_doc
+		se_doc = wo_make_stock_entry(work_order, "Manufacture", qty=job_card_qty)
+		if isinstance(se_doc, dict):
+			stock_entry_manufacture = frappe.get_doc(se_doc)  # pyright: ignore[reportAssignmentType]
+		else:
+			stock_entry_manufacture = se_doc
 
-	fg_item = next((item for item in stock_entry_manufacture.items if item.is_finished_item), None)
-	if fg_item:
-		fg_item.qty = job_card_qty
+		fg_item = next((item for item in stock_entry_manufacture.items if item.is_finished_item), None)
+		if fg_item:
+			fg_item.qty = job_card_qty
 
-	# TODO: Move this to a function whose sole responsibility is to set slab details on the stock entry.
-	if process_name == "Quality Check":
-		stock_entry_manufacture.slab_grade = slab_grade
-		stock_entry_manufacture.slab_serial_no = slab_number.split("-")[-1] if slab_number else ""
-		stock_entry_manufacture.slab_batch_no = slab_number.split("-")[0] if slab_number else ""
+		# TODO: Move this to a function whose sole responsibility is to set slab details on the stock entry.
+		if process_name == "Quality Check":
+			stock_entry_manufacture.slab_grade = slab_grade
+			stock_entry_manufacture.slab_serial_no = slab_number.split("-")[-1] if slab_number else ""
+			stock_entry_manufacture.slab_batch_no = slab_number.split("-")[0] if slab_number else ""
 
-		for item in stock_entry_manufacture.items:
-			if item.is_finished_item:
-				item.slab_no = slab_number  # pyright: ignore[reportAttributeAccessIssue]
-				item.to_slab_no = slab_number  # pyright: ignore[reportAttributeAccessIssue]
-				item.slab_quality_grade = slab_grade
-				item.to_slab_grade = slab_grade
+			for item in stock_entry_manufacture.items:
+				if item.is_finished_item:
+					item.slab_no = slab_number  # pyright: ignore[reportAttributeAccessIssue]
+					item.to_slab_no = slab_number  # pyright: ignore[reportAttributeAccessIssue]
+					item.slab_quality_grade = slab_grade
+					item.to_slab_grade = slab_grade
 
-	stock_entry_manufacture.naming_series = STOCK_ENTRY_NAMING_SERIES_MAP.get(process_name.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
-	stock_entry_manufacture.fg_completed_qty = job_card_qty
+		stock_entry_manufacture.naming_series = STOCK_ENTRY_NAMING_SERIES_MAP.get(process_name.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
+		stock_entry_manufacture.fg_completed_qty = job_card_qty
 
-	# Deadlocks are handled at the endpoint level by @atomic_endpoint, which
-	# rolls back and retries the whole operation; a fragment-level retry here
-	# would leave the job card / work order writes committed-in-progress.
-	stock_entry_manufacture.insert()
-	stock_entry_manufacture.submit()
+		# Deadlocks are handled at the endpoint level by @atomic_endpoint, which
+		# rolls back and retries the whole operation; a fragment-level retry here
+		# would leave the job card / work order writes committed-in-progress.
+		stock_entry_manufacture.insert()
+		stock_entry_manufacture.submit()
 
 	wo.update_work_order_qty()
 	wo.reload()
