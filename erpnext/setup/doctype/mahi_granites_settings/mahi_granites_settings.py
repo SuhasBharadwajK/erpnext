@@ -20,8 +20,10 @@ class MahiGranitesSettings(Document):
 		from frappe.types import DF
 
 		annex_d_addr: DF.SmallText | None
+		authorised_signatory: DF.Link
 		bypass_cooling: DF.Check
 		curing_labels: DF.Table[CuringLabel]
+		enforce_queue: DF.Check
 		max_heating_minutes: DF.Float
 		max_pay_line_amount: DF.Currency
 		maximum_crates_per_container: DF.Int

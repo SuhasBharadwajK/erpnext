@@ -79,7 +79,8 @@
   "current_time",
   "amended_from",
   "connections_tab",
-  "is_finished"
+  "is_finished",
+  "is_archived"
  ],
  "fields": [
   {
@@ -554,6 +555,16 @@
    "hidden": 1,
    "label": "Is Finished",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Archived cards are pushed to the background and are never picked up for work.",
+   "fieldname": "is_archived",
+   "fieldtype": "Check",
+   "label": "Is Archived",
+   "no_copy": 1,
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "allow_on_submit": 1,

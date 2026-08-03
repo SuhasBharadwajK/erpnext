@@ -222,7 +222,7 @@ const unloadToTrimming = (slab) => {
                             </div>
                         </div>
                     </div>
-                    <button class="btn btn-primary w-100 font-weight-bold" :disabled="isProcessing" @click="unloadToTrimming(slab)">
+                    <button :id="'slab-loading-unload-btn-' + slab.name" class="btn btn-primary w-100 font-weight-bold" :disabled="isProcessing" @click="unloadToTrimming(slab)">
                         <i v-if="isProcessing" class="fa fa-spinner fa-spin mr-2"></i>
                         {{ __('Unload to Trimming') }}
                         <span v-if="!isProcessing" class="fa fa-arrow-right ml-2" style="opacity: 0.5;"></span>

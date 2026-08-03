@@ -7,20 +7,35 @@ from frappe.query_builder.functions import Count
 from frappe.types import DF
 
 from erpnext.accounts.doctype.fiscal_year.fiscal_year import FiscalYear
-from erpnext.manufacturing.doctype.oven_operation.oven_operation import OvenOperation
-from erpnext.manufacturing.doctype.preliminary_quality_check.preliminary_quality_check import (
-	PreliminaryQualityCheck,
-)
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
 from erpnext.manufacturing.doctype.slab.slab import ALLOWED_STAGES, Slab
 from erpnext.manufacturing.doctype.slab_batch_number.api import delete_batch_numbers_older_than
 from erpnext.manufacturing.doctype.slab_batch_number.slab_batch_number import SlabBatchNumber
 from erpnext.manufacturing.doctype.slab_history.slab_history import SlabHistory
-from erpnext.manufacturing.doctype.slab_quality_report.api import create_slab_quality_report
-from erpnext.manufacturing.doctype.slab_quality_report.slab_quality_report import SlabQualityReport
+from erpnext.manufacturing.doctype.slab_quality_grade.slab_quality_grade import SlabQualityGrade
 from erpnext.setup.doctype.attendance_shift.attendance_shift import AttendanceShift
 from erpnext.setup.doctype.mahi_granites_settings.mahi_granites_settings import MahiGranitesSettings
 
 STAGES_TO_SKIP_IN_AUTO_MOVE = ["Re-Pressing", "Packed", "Shipped", "Discarded", "Quality Check", "Recovery", "Rejected"]
+
+SLAB_FIELDS_TO_GET = [
+	"name",
+	"number",
+	"serial_number",
+	"status",
+	"line",
+	"batch_number",
+	"template",
+	"is_cur_stage_complete",
+	"child_line",
+	"creation",
+	"modified",
+	"current_job_card",
+	"is_recovered",
+	"is_repolished",
+	"is_recalibrated",
+	"quality_assessment",
+]
 
 
 @frappe.whitelist()
@@ -90,10 +105,13 @@ def checkout_slab(slab_number: str, publish_event=True):
 	slab.save(ignore_permissions=True)
 
 	if publish_event:
-		frappe.publish_realtime("slab_checkout", slab)
+		# Notify clients only after the transaction commits, so they never see a
+		# checkout that later rolls back.
+		frappe.publish_realtime("slab_checkout", slab, after_commit=True)
 
 
 @frappe.whitelist()
+@atomic_endpoint
 def re_press_slab(slab_number: str):
 	slab: Slab = frappe.get_doc("Slab", slab_number)  # pyright: ignore[reportAssignmentType]
 	if slab.status != "Pressing":
@@ -169,44 +187,28 @@ def move_slab_to(
 	slab.save(ignore_permissions=True)
 
 	if publish_event:
-		frappe.publish_realtime("slab_move", slab)
+		# Notify clients only after the transaction commits.
+		frappe.publish_realtime("slab_move", slab, after_commit=True)
 
 
 @frappe.whitelist()
-def get_slabs_in(line: str, current_stage: str) -> list[dict]:
+def get_slabs_in(line: str, current_stage: str, slab_number_to_ignore: str = "") -> list[Slab]:
+	filters = {"line": line, "status": current_stage, "is_cur_stage_complete": False}
+	if slab_number_to_ignore:
+		filters["name"] = ["!=", slab_number_to_ignore]
+
 	slabs = frappe.db.get_list(
 		"Slab",
 		ignore_permissions=True,
-		filters={
-			"line": line,
-			"status": current_stage,
-			"is_cur_stage_complete": False,
-		},
-		fields=[
-			"name",
-			"number",
-			"serial_number",
-			"status",
-			"line",
-			"batch_number",
-			"template",
-			"is_cur_stage_complete",
-			"child_line",
-			"creation",
-			"modified",
-			"current_job_card",
-			"is_recovered",
-			"is_repolished",
-			"is_recalibrated",
-			"quality_assessment",
-		],
+		filters=filters,
+		fields=SLAB_FIELDS_TO_GET,
 	)
 
 	return slabs
 
 
 @frappe.whitelist()
-def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=False) -> list[Slab]:
+def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=False, slab_number_to_ignore: str = "") -> list[Slab]:
 	include_current_stage = bool(include_current_stage)
 	# Determine valid previous stages based on the next_stage and rules
 	valid_previous_stages = []
@@ -236,32 +238,71 @@ def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=Fal
 	if include_current_stage:
 		valid_previous_stages.append(next_stage)
 
+	filters = {"status": ["in", valid_previous_stages], "is_cur_stage_complete": 1, "line": line}
+	if slab_number_to_ignore:
+		filters["name"] = ["!=", slab_number_to_ignore]
+
 	slabs = frappe.db.get_list(
 		"Slab",
 		order_by="modified asc",
 		ignore_permissions=True,
-		filters={"status": ["in", valid_previous_stages], "is_cur_stage_complete": 1, "line": line},
+		filters=filters,
 		limit=limit,  # Limit one to send only the first slab
-		fields=[
-			"name",
-			"serial_number",
-			"status",
-			"line",
-			"batch_number",
-			"template",
-			"creation",
-			"modified",
-			"child_line",
-			"current_job_card",
-			"is_cur_stage_complete",
-			"is_recovered",
-			"is_repolished",
-			"is_recalibrated",
-			"quality_assessment",
-		],
+		fields=SLAB_FIELDS_TO_GET,
 	)
 
 	return slabs
+
+
+LOOKUP_ALLOWED_STAGES = ALLOWED_STAGES[: ALLOWED_STAGES.index("Quality Check") + 1]
+
+
+@frappe.whitelist()
+def search_slabs_for_lookup(txt: str = "", limit: int = 20) -> list[Slab]:
+	if not txt:
+		return []
+
+	return frappe.db.get_list(
+		"Slab",
+		ignore_permissions=True,
+		filters={
+			"name": ["like", f"%{txt}%"],
+			"status": ["in", LOOKUP_ALLOWED_STAGES],
+		},
+		fields=["name", "template", "status", "is_cur_stage_complete"],
+		order_by="modified desc",
+		limit=limit,
+	)
+
+
+@frappe.whitelist()
+def get_slab_lookup_details(slab_number: str):
+	slab: Slab = frappe.get_doc("Slab", slab_number)  # pyright: ignore[reportAssignmentType]
+	if slab.status not in LOOKUP_ALLOWED_STAGES:
+		frappe.throw("Slab has moved past the Quality Check stage.")
+
+	grade: SlabQualityGrade = (  # pyright: ignore[reportAssignmentType]
+		frappe.db.get_value("Slab Quality Grade", slab.grade, ["code", "color"], as_dict=True)  # pyright: ignore[reportArgumentType]
+		if slab.grade
+		else None
+	)
+
+	return {
+		"name": slab.name,
+		"template": slab.template,
+		"status": slab.status,
+		"is_cur_stage_complete": slab.is_cur_stage_complete,
+		"grade": grade.code if grade else None,
+		"grade_color": grade.color if grade else None,
+		"slab_history": [
+			{
+				"station": history.station,
+				"in_time": history.in_time,
+				"out_time": history.out_time,
+			}
+			for history in slab.slab_history
+		],
+	}
 
 
 @frappe.whitelist()
@@ -477,11 +518,16 @@ def _get_batch_number_from_list(today: date, fiscal_year: FiscalYear, create_and
 	start_day_factor = 1 if last_shift.does_span_next_day and now_time.hour < shift_end_hour else 0
 	today -= timedelta(days=start_day_factor)
 
-	# Get today's batch number.
+	# Get today's batch number. The for_update lock makes this a locking read:
+	# when the row is absent InnoDB sets a gap lock on the date range, blocking
+	# a concurrent operator from inserting a second batch for the same day until
+	# this (atomic) transaction commits. Prevents duplicate batches at day
+	# rollover.
 	slab_batch_number: str = frappe.db.get_value(  # pyright: ignore[reportAssignmentType]
 		"Slab Batch Number",
 		filters={"date": today.strftime("%Y-%m-%d")},
 		fieldname="name",
+		for_update=True,
 	)
 
 	fy_start_date: datetime = fiscal_year.year_start_date  # pyright: ignore[reportAssignmentType]
@@ -513,6 +559,26 @@ def _get_batch_number_from_list(today: date, fiscal_year: FiscalYear, create_and
 
 def _get_slab_number(batch: str, line: str) -> int:
 	today = date.today()
+
+	# Roll the date back one day while the last shift of the day is still running
+	# past midnight, so a slab minted in the early hours is attributed to the day
+	# (and month) the shift started — consistent with _get_batch_number_from_list.
+	attendance_shifts: list[AttendanceShift] = frappe.db.get_all(
+		"Attendance Shift",
+		fields=["name", "start_time", "end_time", "does_span_next_day"],
+		limit=1,
+		order_by="start_time DESC",
+	)
+
+	last_shift = attendance_shifts[0] if attendance_shifts else None
+	if not last_shift:
+		raise frappe.ValidationError("No attendance shifts found.")
+
+	now_time = datetime.now()
+	shift_end_hour = last_shift.end_time.seconds / 3600  # pyright: ignore[reportAttributeAccessIssue]
+	start_day_factor = 1 if last_shift.does_span_next_day and now_time.hour < shift_end_hour else 0
+	today -= timedelta(days=start_day_factor)
+
 	curr_month = today.month
 	curr_year = today.year
 
@@ -520,15 +586,23 @@ def _get_slab_number(batch: str, line: str) -> int:
 
 	batch_prefix = batch.split("/")[0]
 
-	mahi_granites_settings: MahiGranitesSettings = frappe.get_doc("Mahi Granites Settings")  # pyright: ignore[reportAssignmentType]
-	slab_seed = next(
-		(
-			seed.seed
-			for seed in mahi_granites_settings.slab_seeds
-			if seed.line == line and seed.seed_month and seed.seed_month.strftime("%Y-%m-%d") == month_start  # pyright: ignore[reportAttributeAccessIssue]
-		),
-		0,
-	)  # pyright: ignore
+	# Lock the seed row for this line/month with SELECT ... FOR UPDATE so two
+	# concurrent distribution operators cannot read the same seed and mint
+	# duplicate slab numbers. The lock is held until the enclosing (atomic)
+	# transaction commits. The read-modify-write is done directly on the child
+	# row, scoped to THIS line (the previous version incremented every line's
+	# seed for the month, which was inconsistent with the per-line lookup).
+	seed_row = frappe.db.get_value(
+		"Slab Seed",
+		{"parent": "Mahi Granites Settings", "line": line, "seed_month": month_start},
+		["name", "seed"],
+		as_dict=True,
+		for_update=True,
+	)
+
+	if seed_row and seed_row.seed >= 0:
+		frappe.db.set_value("Slab Seed", seed_row.name, "seed", seed_row.seed + 1)
+		return seed_row.seed + 1
 
 	slab_count: int = (
 		frappe.db.count(
@@ -538,7 +612,6 @@ def _get_slab_number(batch: str, line: str) -> int:
 				["creation", ">=", month_start],
 			],
 		)
-		+ slab_seed
 	) + 1
 
 	return slab_count or 0
