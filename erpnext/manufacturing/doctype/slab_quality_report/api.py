@@ -27,7 +27,7 @@ def create_slab_quality_report(slab_name: str, slab_qc: SlabQualityReport):
 		slab.save(ignore_permissions=True)
 		slab.reload()
 
-	slab.grade = slab_qc.grade
+	slab.grade = slab_qc.grade or None
 	slab.quality_assessment = slab_qc.name
 	slab.save(ignore_permissions=True)
 

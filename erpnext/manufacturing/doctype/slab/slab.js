@@ -13,18 +13,34 @@ function add_custom_badge(frm) {
     let label = '';
 	let color = '';
 
-    if (frm.doc.is_paused === 1) {
+	if (frm.doc.is_paused === 1) {
         label = __('Paused');
         color = 'yellow';
-    }
 
-    if (label) {
         const badge = $(`
-            <span class="indicator-pill ${color} custom-extra-badge" style="margin-left:8px;">
+            <span class="indicator-pill pause-pill ${color} custom-extra-badge" style="margin-left:8px;">
                 ${label}
             </span>
         `);
 
         frm.page.wrapper.find('.indicator-pill').last().after(badge);
     }
+	else {
+		frm.page.wrapper.find('.pause-pill').last().remove();
+	}
+
+    if (frm.doc.is_cur_stage_complete) {
+        label = __('Completed');
+        color = 'blue';
+        const status_badge = $(`
+            <span class="indicator-pill stage-pill ${color} custom-extra-badge" style="margin-left:8px;">
+                ${label}
+            </span>
+        `);
+
+        frm.page.wrapper.find('.indicator-pill').last().before(status_badge);
+	}
+	else {
+		frm.page.wrapper.find('.stage-pill').last().remove();
+	}
 }

@@ -120,13 +120,13 @@ const fetch_slab_for_job_card = async (play_ding = false) => {
     loadingSlab.value = true;
     try {
         const result = await frappe.call({
-            method: 'erpnext.manufacturing.page.operator_station.operator_station.get_next_work_item',
+            method: 'erpnext.manufacturing.doctype.oven.api.get_slab_and_job_card_for_oven',
             args: {
                 process: "Heating",
                 line: work_context.assigned_line,
                 include_wip: false
             }
-        });
+		});
 
         if (!selectedSlab.value && result.message?.slab && play_ding) {
             erpnext.utils.play_ding("new_slab");
@@ -265,7 +265,7 @@ async function confirmLoad() {
                     args: {
                         oven_op: ovenOperation.value,
                         line: work_context.assigned_line,
-                        job_card_name: jobCardNumber.value || selectedSlab.value?.current_job_card,
+                        job_card_name: jobCardNumber.value || "",
                         slab_template: selectedSlab.value?.template,
                     }
                 })
@@ -524,7 +524,7 @@ frappe.realtime.on('slab_checkout', async (slab) => {
             <div class="d-flex justify-content-end pt-4">
                 <button class="btn btn-secondary mr-2" :disabled="isProcessing" @click="closeModal">{{ __('Cancel')
                 }}</button>
-                <button class="btn btn-primary" :disabled="isProcessing" @click="confirmLoad">
+                <button id="oven-load-slab-btn" class="btn btn-primary" :disabled="isProcessing" @click="confirmLoad">
                     <span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
                     {{ __('Load Slab') }}
                 </button>
@@ -543,22 +543,22 @@ frappe.realtime.on('slab_checkout', async (slab) => {
             <div class="form-group mb-3">
                 <label class="small text-muted">{{ __('Slab Top Temperature') }} <span
                         class="text-danger">*</span></label>
-                <input type="number" v-model.number="unloadValues.slab_top_temp" class="form-control">
+                <input id="oven-slab-top-temp-input" type="number" v-model.number="unloadValues.slab_top_temp" class="form-control">
             </div>
             <div class="form-group mb-3">
                 <label class="small text-muted">{{ __('Slab Bottom Temperature') }} <span
                         class="text-danger">*</span></label>
-                <input type="number" v-model.number="unloadValues.slab_bottom_temp" class="form-control">
+                <input id="oven-slab-bottom-temp-input" type="number" v-model.number="unloadValues.slab_bottom_temp" class="form-control">
             </div>
             <div class="form-group mb-4">
                 <label class="small text-muted">{{ __('Remarks') }}</label>
-                <textarea v-model="unloadValues.remarks" class="form-control" rows="3"></textarea>
+                <textarea id="oven-unload-remarks-input" v-model="unloadValues.remarks" class="form-control" rows="3"></textarea>
             </div>
 
             <div class="d-flex justify-content-end">
                 <button class="btn btn-secondary mr-2" :disabled="isProcessing" @click="showUnloadModal = false">{{
                     __('Cancel') }}</button>
-                <button class="btn btn-primary" :disabled="isProcessing" @click="confirmUnload">
+                <button id="oven-confirm-unload-btn" class="btn btn-primary" :disabled="isProcessing" @click="confirmUnload">
                     <span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
                     {{ __('Confirm Unload') }}
                 </button>

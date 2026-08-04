@@ -24,6 +24,7 @@
   "process_loss_qty",
   "project",
   "production_line",
+  "slab_group_id",
   "section_break_ndpq",
   "required_items",
   "work_order_configuration",
@@ -598,6 +599,16 @@
    "label": "Production Line",
    "options": "Production Line",
    "read_only": 1
+  },
+  {
+   "description": "Groups every Work Order created for a single slab by the mixer station. Used to resolve the next process's Work Order without a Production Plan.",
+   "fieldname": "slab_group_id",
+   "fieldtype": "Data",
+   "label": "Slab Group ID",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "icon": "fa fa-cogs",

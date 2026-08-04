@@ -14,10 +14,10 @@ def move_slab_to_curing(slab_name, slab_template, h_bend, v_bend, d1_bend, d2_be
     doc: PreliminaryQualityCheck = frappe.new_doc("Preliminary Quality Check")  # pyright: ignore[reportAssignmentType]
     doc.slab = slab_name
     doc.slab_template = slab_template
-    doc.h_bend = int(h_bend)
-    doc.v_bend = int(v_bend)
-    doc.d1_bend = int(d1_bend)
-    doc.d2_bend = int(d2_bend)
+    doc.h_bend = int(h_bend or "0")
+    doc.v_bend = int(v_bend or "0")
+    doc.d1_bend = int(d1_bend or "0")
+    doc.d2_bend = int(d2_bend or "0")
     doc.depth = depth
     doc.remarks = remarks
 

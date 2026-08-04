@@ -20,9 +20,13 @@
   "show_job_card_queue_to_mixer_operators",
   "oven_section",
   "max_heating_minutes",
+  "cooling_section",
+  "bypass_cooling",
   "curing_section",
   "min_curing_hours",
   "curing_labels",
+  "queue_section",
+  "enforce_queue",
   "shipping_tab",
   "packing_settings_section",
   "maximum_crates_per_container",
@@ -30,7 +34,8 @@
   "slab_sales_allowance",
   "export_compliance_section",
   "annex_d_addr",
-  "column_break_zcbd"
+  "column_break_zcbd",
+  "authorised_signatory"
  ],
  "fields": [
   {
@@ -178,13 +183,43 @@
    "fieldtype": "Int",
    "label": "Sales Allowance (in mm)",
    "reqd": 1
+  },
+  {
+   "fieldname": "cooling_section",
+   "fieldtype": "Section Break",
+   "label": "Cooling"
+  },
+  {
+   "default": "0",
+   "description": "Bypass cooling and move the slab directly to curing",
+   "fieldname": "bypass_cooling",
+   "fieldtype": "Check",
+   "label": "Bypass Cooling"
+  },
+  {
+   "fieldname": "queue_section",
+   "fieldtype": "Section Break",
+   "label": "Queue"
+  },
+  {
+   "default": "0",
+   "fieldname": "enforce_queue",
+   "fieldtype": "Check",
+   "label": "Enforce slab queue in Cooling, Calibration, and Polishing"
+  },
+  {
+   "fieldname": "authorised_signatory",
+   "fieldtype": "Link",
+   "label": "Authorised Signatory",
+   "options": "Contact",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-22 22:18:26.120663",
+ "modified": "2026-07-03 17:46:16.368458",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Mahi Granites Settings",

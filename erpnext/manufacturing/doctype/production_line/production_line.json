@@ -13,7 +13,8 @@
   "column_break_muqg",
   "is_active",
   "is_group",
-  "parent_line"
+  "parent_line",
+  "mixing_operation"
  ],
  "fields": [
   {
@@ -72,6 +73,15 @@
    "link_filters": "[[\"Production Line\",\"is_group\",\"=\",1]]",
    "mandatory_depends_on": "eval:!doc.is_group",
    "options": "Production Line"
+  },
+  {
+   "depends_on": "eval:doc.is_group",
+   "description": "Mixing operation used when a slab chain for this line (or any of its child lines) is created from the mixer station, e.g. one slab per mix vs a multi-slab mix. Falls back to the Mixing BOM's own operation when unset.",
+   "fieldname": "mixing_operation",
+   "fieldtype": "Link",
+   "label": "Mixing Operation",
+   "link_filters": "[[\"Operation\",\"name\",\"like\",\"%Mixing%\"]]",
+   "options": "Operation"
   }
  ],
  "grid_page_length": 50,

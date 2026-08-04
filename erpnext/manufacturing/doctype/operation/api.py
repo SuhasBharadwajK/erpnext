@@ -8,13 +8,62 @@ from erpnext.manufacturing.doctype.bom.bom import BOM
 from erpnext.manufacturing.doctype.job_card.constants import LOW_PRIORITY
 from erpnext.manufacturing.doctype.job_card.job_card import JobCard
 from erpnext.manufacturing.doctype.manufacturing_process.constants import MFG_PROCESS_MAP, MIXING_PROCESS
+from erpnext.manufacturing.doctype.operation.txn_utils import atomic_endpoint
+from erpnext.manufacturing.doctype.production_line.production_line import get_all_child_lines
+from erpnext.manufacturing.doctype.slab.slab import Slab
 from erpnext.manufacturing.doctype.work_order.work_order import WorkOrder
 from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
 
+MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP = {
+	"mixing": "MAT-STE-MIXN-TRF-.YYYY.-",
+	"distribution": "MAT-STE-DIST-TRF-.YYYY.-",
+	"pressing": "MAT-STE-PRES-TRF-.YYYY.-",
+	"heating": "MAT-STE-HEAT-TRF-.YYYY.-",
+	"cooling": "MAT-STE-COOL-TRF-.YYYY.-",
+	"trimming": "MAT-STE-TRIM-TRF-.YYYY.-",
+	"calibration": "MAT-STE-CLBR-TRF-.YYYY.-",
+	"polishing": "MAT-STE-POLI-TRF-.YYYY.-",
+	"quality check": "MAT-STE-QUAL-TRF-.YYYY.-",
+}
+
+
+def item_matches_template(production_item: str | None, slab_template: str | None) -> bool:
+	"""True when ``production_item`` is produced from ``slab_template``: either the
+	bare template itself (terminal process) or an intermediary ``"{template} - {stage}"``.
+
+	Anchored on the full template followed by the ``" - "`` separator, so a template
+	that is a substring of another (e.g. a ``-J`` size inside ``-JUMBO``) can no
+	longer cross-match the way the old unanchored ``LIKE %template%`` filters did.
+	"""
+	if not production_item or not slab_template:
+		return False
+	return production_item == slab_template or production_item.startswith(f"{slab_template} - ")
+
 
 @frappe.whitelist()
-def transfer_to_next_process(current_job_card, current_work_order, qty=None, process=None, mixer_number=None):
-	"""Transfer FG from Mixing → Next Process Source Warehouse."""
+@atomic_endpoint
+def transfer_to_next_process(
+	current_job_card,
+	current_work_order,
+	qty=None,
+	process=None,
+	mixer_number=None,
+	work_orders=None,
+	line: str | None = None,
+):
+	"""Transfer FG from Mixing → Next Process Source Warehouse.
+
+	Called directly by the mixer "Transfer" button (an outermost entry point) and
+	also nested inside finish_process / the importer. @atomic_endpoint gives the
+	mixer path whole-operation deadlock retry; when nested it is a reentrant
+	pass-through that simply joins the enclosing transaction.
+
+	``work_orders``, when given (e.g. by the bulk importer against a specific
+	production plan), overrides the plan derived from ``current_work_order``:
+	the next Work Order for ``process``/this slab is chosen from that explicit
+	list instead of ``current_work_order``'s own production_plan, so leftover
+	Job Cards on the target plan get used instead of the mixing card's plan.
+	"""
 	wo: WorkOrder = frappe.get_doc("Work Order", current_work_order)  # pyright: ignore
 	fg_item = wo.production_item
 	fg_qty = flt(qty or wo.produced_qty)
@@ -35,50 +84,108 @@ def transfer_to_next_process(current_job_card, current_work_order, qty=None, pro
 
 	slab_template = _get_slab_template_from_bom(bom_doc)
 
+	production_line = line or wo.production_line
+
+	# The slab being carried forward is the one bound to the current job card.
+	# (Empty for Mixing -> Distribution, where the slab does not exist yet.)
+	slab_no = frappe.db.get_value("Job Card", current_job_card, "slab")
+
+	next_wo_filters = {
+		"docstatus": ["<", 2],
+		"production_item": ["like", f"%{slab_template}%"],
+		"production_line": production_line,
+	}
+
+	# Station-created chains carry a slab_group_id identifying exactly the Work Orders
+	# built for this one slab. It is a tighter scope than the plan and is the only one
+	# available for chains that have no Production Plan; plan-based chains (and every
+	# job card predating slab_group_id) fall back to the plan.
+	slab_group_id = wo.get("slab_group_id")
+
+	if work_orders:
+		next_wo_filters["name"] = ["in", work_orders]
+	elif slab_group_id:
+		next_wo_filters["slab_group_id"] = slab_group_id
+	else:
+		next_wo_filters["production_plan"] = wo.production_plan
+
 	next_wos = frappe.db.get_list(
 		"Work Order",
-		filters={
-			"production_plan": wo.production_plan,
-			"docstatus": ["<", 2],
-			"production_item": ["like", f"%{slab_template}%"],
-			"production_line": wo.production_line,
-		},
-		fields=["name"],
+		filters=next_wo_filters,
+		fields=["name", "production_item"],
+		order_by="creation asc",
 		ignore_permissions=True,
 	)
 
-	wo_names = [wo.name for wo in next_wos]
-	wo_ops = frappe.db.get_list(
-		"Work Order Operation",
-		filters={
-			"parent": ["in", wo_names],
-			"operation": ["=", next_process],
-		},
-		fields=["parent"],
-		ignore_permissions=True,
+	# Anchored template match: the old unanchored LIKE let one template pick up
+	# a Work Order of another template that merely contains it as a substring.
+	wo_names = [w.name for w in next_wos if item_matches_template(w.production_item, slab_template)]
+
+	wo_ops = (
+		frappe.db.get_list(
+			"Work Order Operation",
+			filters={
+				"parent": ["in", wo_names],
+				"operation": ["=", next_process],
+			},
+			fields=["parent"],
+			ignore_permissions=True,
+		)
+		if wo_names
+		else []
 	)
 
-	next_wo = wo_ops[0].parent if wo_ops else None
+	# Preserve the creation-asc order of the Work Orders (wo_ops carries no
+	# meaningful order of its own).
+	wo_ops_parents = {op.parent for op in wo_ops}
+	candidate_wos = [name for name in wo_names if name in wo_ops_parents]
+
+	next_wo = None
+	if slab_no and len(candidate_wos) > 1:
+		# Several sibling WOs match this process/template: prefer the one whose
+		# open card is already bound to this slab, so the transfer lands on the
+		# slab's own chain instead of an arbitrary sibling's.
+		next_wo = frappe.db.get_value(
+			"Job Card",
+			{"work_order": ["in", candidate_wos], "slab": slab_no, "status": "Open", "docstatus": 0},
+			"work_order",
+		)
 
 	if not next_wo:
-		next_wo = frappe.db.get_value(
+		next_wo = candidate_wos[0] if candidate_wos else None
+
+	if not next_wo:
+		fallback_filters = {
+			"item_name": ["like", f"%{next_process}%"],
+			"docstatus": ["<", 2],
+			"production_item": ["like", f"%{slab_template}%"],
+			"production_line": production_line,
+		}
+
+		if work_orders:
+			fallback_filters["name"] = ["in", work_orders]
+		elif slab_group_id:
+			fallback_filters["slab_group_id"] = slab_group_id
+		else:
+			fallback_filters["production_plan"] = wo.production_plan
+
+		fallback_wos = frappe.db.get_list(
 			"Work Order",
-			{
-				"production_plan": wo.production_plan,
-				"item_name": ["like", f"%{next_process}%"],
-				"docstatus": ["<", 2],
-				"production_item": ["like", f"%{slab_template}%"],
-			},
-			"name",
+			filters=fallback_filters,
+			fields=["name", "production_item"],
+			order_by="creation asc",
+			ignore_permissions=True,
+		)
+		next_wo = next(
+			(w.name for w in fallback_wos if item_matches_template(w.production_item, slab_template)),
+			None,
 		)
 
 	if not next_wo:
 		frappe.throw(f"Next WO for '{next_process}' not found.")
 
 	next_wo_doc = frappe.get_doc("Work Order", next_wo)
-	open_job_card = frappe.db.get_value(
-		"Job Card", {"work_order": next_wo, "status": "Open", "docstatus": 0}, "name", order_by="creation asc"
-	)
+	open_job_card = _select_open_job_card_for_next_wo(next_wo, slab_no)
 
 	if not open_job_card:
 		frappe.throw(f"No open job cards available")
@@ -113,6 +220,7 @@ def transfer_to_next_process(current_job_card, current_work_order, qty=None, pro
 		s_warehouse=wo.fg_warehouse,
 		t_warehouse=next_wo_doc.wip_warehouse,
 		job_card_item=job_card_item,
+		next_station=next_process or "",
 	)
 
 	job_card_item_doc = frappe.get_doc("Job Card Item", job_card_item)
@@ -123,9 +231,13 @@ def transfer_to_next_process(current_job_card, current_work_order, qty=None, pro
 	open_jc_doc.transferred_qty = sum(item.transferred_qty for item in open_jc_doc.items)
 	if mixer_number:
 		open_jc_doc.mixer_number = mixer_number
-	open_jc_doc.save(ignore_permissions=True)
 
-	frappe.db.commit()
+	# Bind the card to the slab so a concurrent transfer/station cannot claim it.
+	if slab_no and not open_jc_doc.slab:
+		open_jc_doc.slab = slab_no
+		open_jc_doc.slab_template = frappe.db.get_value("Slab", slab_no, "template")
+
+	open_jc_doc.save(ignore_permissions=True)
 
 	if process == "Mixing":
 		frappe.publish_realtime("refresh_operator_station")
@@ -187,6 +299,11 @@ def get_open_job_cards(
 	slab_template="",
 	limit=0,
 	exclude_job_cards="",
+	work_orders:list[str] | None=None,
+	slab=None,
+	production_plan=None,
+	slab_group_id=None,
+	include_archived=False,
 ):
 	is_mixing = process == "Mixing"
 	if is_mixing:
@@ -221,8 +338,51 @@ def get_open_job_cards(
 			"workstation": ws_query,
 		}
 
-	if slab_template:
-		filters["production_item"] = ["like", f"{slab_template} - %"]
+	# Archived cards are parked deliberately (e.g. a mixing remainder too small to
+	# transfer onward) and must never be handed back out as work.
+	if not include_archived:
+		filters["is_archived"] = 0
+
+	# Scope to the Work Orders of one station-created slab chain. Job Card has no direct
+	# slab_group_id, so resolve through Work Order, same as the plan scope below.
+	if slab_group_id and not work_orders:
+		work_orders = frappe.get_all(
+			"Work Order",
+			filters={"slab_group_id": slab_group_id, "docstatus": ["<", 2]},
+			pluck="name",
+			ignore_permissions=True,
+		) or ["__none__"]
+
+	# Scope to a production plan by resolving its work orders (Job Card has no
+	# direct production_plan field).
+	if production_plan and not work_orders:
+		work_orders = frappe.get_all(
+			"Work Order",
+			filters={"production_plan": production_plan, "docstatus": ["<", 2]},
+			pluck="name",
+			ignore_permissions=True,
+		) or ["__none__"]
+
+	if work_orders:
+		filters["work_order"] = ["in", work_orders]
+
+	if slab:
+		filters["slab"] = slab
+
+	# Anchored template match: production items are either the bare template
+	# (terminal process) or "{template} - {stage}". The old unanchored
+	# `%item_code%` LIKE let one template match a card of another template that
+	# contains it as a substring; it also silently overwrote the slab_template
+	# filter when both were passed.
+	template = item_code or slab_template
+	or_filters = (
+		[
+			["production_item", "=", template],
+			["production_item", "like", f"{template} - %"],
+		]
+		if template
+		else None
+	)
 
 	if exclude_job_cards:
 		if isinstance(exclude_job_cards, list):
@@ -236,9 +396,6 @@ def get_open_job_cards(
 		else:
 			filters["production_line"] = line
 
-	if item_code:
-		filters["production_item"] = ["like", f"%{item_code}%"]
-
 	limit = limit or (
 		9999999
 		if not is_mixing
@@ -250,6 +407,7 @@ def get_open_job_cards(
 		"Job Card",
 		limit=limit,
 		filters=filters,
+		or_filters=or_filters,
 		fields=[
 			"name",
 			"work_order",
@@ -277,6 +435,144 @@ def _get_workstations(workstation_type: str):
 		filters={"workstation_type": ["like", f"%{workstation_type}%"]},
 		fields=["workstation_name"],
 	)
+
+
+def _select_open_job_card_for_next_wo(next_wo: str, slab_no: str | None):
+	"""Pick the open Job Card on ``next_wo`` to receive the transferred material.
+
+	When the slab is known, prefer the card already bound to that slab; failing
+	that, claim the earliest *unbound* card. The selection is locked
+	``for_update`` so two concurrent transfers cannot grab the same card.
+	When there is no slab yet (Mixing -> Distribution), fall back to the
+	earliest open card.
+	"""
+	base = {"work_order": next_wo, "status": "Open", "docstatus": 0}
+
+	if slab_no:
+		bound = frappe.db.get_value(
+			"Job Card", {**base, "slab": slab_no}, "name", order_by="creation asc", for_update=True
+		)
+		if bound:
+			return bound
+		return frappe.db.get_value(
+			"Job Card",
+			{**base, "slab": ["is", "not set"]},
+			"name",
+			order_by="creation asc",
+			for_update=True,
+		)
+
+	return frappe.db.get_value("Job Card", base, "name", order_by="creation asc", for_update=True)
+
+
+def _get_slab_production_plan(slab) -> str | None:
+	"""Derive the production plan that owns ``slab`` via its job-card chain."""
+	jc_name = slab.current_job_card
+	if not jc_name:
+		for history in reversed(slab.slab_history or []):
+			if history.job_card_number:
+				jc_name = history.job_card_number
+				break
+
+	if not jc_name:
+		return None
+
+	work_order = frappe.db.get_value("Job Card", jc_name, "work_order")
+	if not work_order:
+		return None
+
+	return frappe.db.get_value("Work Order", work_order, "production_plan")  # pyright: ignore[reportReturnType]
+
+
+def _get_slab_group_id(slab) -> str | None:
+	"""The slab chain id (``Work Order.slab_group_id``) that owns ``slab``, if any.
+
+	Set only on chains built on demand by the mixer station; plan-created chains and
+	everything predating the field return None and stay on production-plan scoping.
+	"""
+	jc_name = slab.current_job_card
+	if not jc_name:
+		for history in reversed(slab.slab_history or []):
+			if history.job_card_number:
+				jc_name = history.job_card_number
+				break
+
+	if not jc_name:
+		return None
+
+	work_order = frappe.db.get_value("Job Card", jc_name, "work_order")
+	if not work_order:
+		return None
+
+	return frappe.db.get_value("Work Order", work_order, "slab_group_id")  # pyright: ignore[reportReturnType]
+
+
+def resolve_job_card_for_slab(
+	slab: Slab,
+	process: str,
+	*,
+	for_update: bool = False,
+	include_wip: bool = True,
+	include_paused: bool = False,
+	work_orders: list[str] | None = None,
+	line: str | list | None = None,
+	ignore_production_plan: bool = True,
+):
+	"""Authoritative, slab-aware resolver for the next Job Card of a slab.
+
+	Scopes candidates to the slab's own production plan, matching production
+	item (template) and line, then prefers the card already bound to the slab
+	and otherwise the earliest unbound card. Never returns a card bound to a
+	*different* slab. When ``for_update`` is set, the chosen card is locked so a
+	concurrent station cannot claim it; callers should immediately bind it
+	(``jc.slab = slab.name``).
+
+	``line``, when given (e.g. the bulk importer's explicit Production Line),
+	overrides ``slab.child_line`` for the line filter below.
+	"""
+	if isinstance(slab, str):
+		slab = frappe.get_doc("Slab", slab)  # pyright: ignore[reportAssignmentType]
+
+	# An explicit work-order list (e.g. from the bulk importer) takes precedence.
+	# Otherwise prefer the slab's own chain id, which pins candidates to exactly the
+	# Work Orders built for this slab; fall back to its production plan.
+	slab_group_id = None if work_orders else _get_slab_group_id(slab)
+	production_plan = (
+		None
+		if (ignore_production_plan or work_orders or slab_group_id)
+		else _get_slab_production_plan(slab)
+	)
+
+	# Line scope: explicit override, else the slab's child line, else its parent
+	# line expanded to child lines (job cards carry child lines). Previously a
+	# slab without a child_line lost the line filter entirely.
+	resolve_line = line or slab.child_line
+	if not resolve_line and slab.line:
+		child_lines = get_all_child_lines(slab.line)
+		resolve_line = child_lines if child_lines else slab.line
+
+	candidates = get_open_job_cards(
+		process,
+		line=resolve_line,
+		include_wip=include_wip,
+		include_material_transferred=True,
+		include_paused=include_paused,
+		item_code=slab.template,
+		production_plan=production_plan,
+		slab_group_id=slab_group_id,
+		work_orders=work_orders,
+	)
+
+	bound = next((c for c in candidates if c.get("slab") == slab.name), None)
+	chosen = bound or next((c for c in candidates if not c.get("slab")), None)
+	if not chosen:
+		return None
+
+	if for_update:
+		# Claim the row so a concurrent station cannot grab the same card.
+		frappe.db.get_value("Job Card", chosen["name"], "name", for_update=True)
+
+	return chosen
 
 
 @frappe.whitelist()
@@ -331,14 +627,15 @@ def create_material_transfer_stock_entry(
 	s_warehouse: str,
 	t_warehouse: str,
 	job_card_item: str,
+	next_station: str,
 ):
-	stock_entry = frappe.new_doc("Stock Entry")  # pyright: ignore
+	stock_entry: StockEntry = frappe.new_doc("Stock Entry")  # pyright: ignore
 	stock_entry.purpose = "Material Transfer for Manufacture"
 	stock_entry.work_order = next_wo  # pyright: ignore
 	stock_entry.job_card = open_job_card  # pyright: ignore # No job card for inter-process transfer
 	stock_entry.company = company
 	stock_entry.fg_completed_qty = transfer_qty
-	stock_entry.previous_job_card = current_job_card
+	stock_entry.previous_job_card = current_job_card  # pyright: ignore[reportAttributeAccessIssue]
 
 	stock_entry.append(
 		"items",
@@ -354,18 +651,29 @@ def create_material_transfer_stock_entry(
 			"job_card_item": job_card_item,
 		},
 	)
+
+	stock_entry.naming_series = MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP.get(next_station.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry.set_stock_entry_type()
 	stock_entry.set_missing_values()
+
+	# Deadlocks are handled at the endpoint level by run_atomic(), which rolls
+	# back and retries the whole operation. A fragment-level retry here would
+	# leave the earlier writes (job card / work order) committed-in-progress.
+	stock_entry.insert()
 	stock_entry.submit()
 
 	return stock_entry
 
 
 @frappe.whitelist()
-def get_job_card_for_operation(operation: str, slab_number: str = None):
-	open_job_card: str = frappe.db.get_value(
+def get_job_card_for_operation(operation: str, slab_number: str | None = None):
+	filters = {"operation": operation, "status": "Open", "docstatus": 0}
+	if slab_number:
+		filters["slab"] = slab_number
+
+	open_job_card: str = frappe.db.get_value(  # pyright: ignore[reportAssignmentType]
 		"Job Card",
-		{"slab": slab_number, "operation": operation, "status": "Open", "docstatus": 0},
+		filters,
 		"name",
 		order_by="creation desc",
 	)

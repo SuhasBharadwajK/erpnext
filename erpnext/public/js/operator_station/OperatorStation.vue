@@ -25,6 +25,14 @@ const error = ref(null);
 const batchNo = ref(null);
 const mixerNumber = ref(null);
 const slabsQueue = ref([]);
+const slabSearch = ref('');
+const filteredSlabsQueue = computed(() => {
+	const q = slabSearch.value.trim().toLowerCase();
+	if (!q) return slabsQueue.value;
+	return slabsQueue.value.filter(item =>
+		`${item.batch_number} ${item.serial_number} ${item.template}`.toLowerCase().includes(q)
+	);
+});
 const is_standalone = ref(false);
 const availableSlabsCount = ref(0);
 const availableJobCardsCount = ref(0);
@@ -323,39 +331,18 @@ async function loadData() {
 async function fetchQueue(line, station) {
 	try {
 		slabsQueue.value = [];
-		// get the warehouse_name whose production_line is line and warehouse_type is station
-		const warehouse = await frappe.db.get_value(
-			'Warehouse',
-			{
-				production_line: line,
-				warehouse_type: station
-			},
-			['name', 'warehouse_name', 'is_standalone']
-		);
-
-		if (warehouse.message.is_standalone) {
-			const res = await frappe.call({
-				method: 'erpnext.manufacturing.doctype.slab.api.get_slabs_in',
-				args: {
-					line: line,
-					current_stage: station.toLowerCase(),
-				}
-			});
-			if (res.message) {
-				slabsQueue.value = res.message || [];
-			}
-		}
-
-		const result = await frappe.call({
-			method: 'erpnext.manufacturing.doctype.slab.api.get_slabs_for',
+		const res = await frappe.call({
+			method: 'erpnext.manufacturing.page.operator_station.operator_station.get_queue_for_process',
 			args: {
+				process: station.toLowerCase(),
 				line: line,
-				next_stage: station.toLowerCase(),
-				limit: 100, // TODO: change this limit
+				slab_number_to_ignore: slabNumber.value,
 			}
 		});
-		if (result.message) {
-			slabsQueue.value = slabsQueue.value.concat(result.message);
+
+		if (res.message) {
+			availableSlabsCount.value = res.message.length;
+			slabsQueue.value = res.message || [];
 		}
 	} catch (e) {
 		console.error('Failed to fetch queue:');
@@ -662,18 +649,28 @@ async function selectSlab(slab) {
 	<!-- Sidebar: Queue -->
 	<div class="operator-station-container d-flex h-100 w-100">
 
-		<div v-if="is_standalone" class="queue-sidebar border-right p-3" style="width: 300px; overflow-y: auto;">
+		<div v-if="is_standalone && !processStarted" class="queue-sidebar border-right p-3" style="width: 300px; max-height: calc(100vh - 170px); overflow-y: auto;">
 			<h5 class="mb-3 font-weight-bold text-center border-bottom pb-2">
 				{{ __('Incoming Slabs') }}
 			</h5>
 
-			<div v-if="slabsQueue.length === 0" class="text-muted text-center py-4 rounded border empty-queue-state">
+			<div class="input-group input-group-sm mb-3">
+				<div class="input-group-prepend">
+					<span class="input-group-text bg-transparent border-right-0">
+						<span class="fa fa-search text-muted"></span>
+					</span>
+				</div>
+				<input v-model="slabSearch" type="text" class="form-control search-input border-left-0"
+					:placeholder="__('Search slabs...')">
+			</div>
+
+			<div v-if="filteredSlabsQueue.length === 0" class="text-muted text-center py-4 rounded border empty-queue-state">
 				<span class="fa fa-inbox fa-2x mb-2 d-block text-muted-light"></span>
-				{{ __('No slabs in queue') }}
+				{{ slabSearch ? __('No matching slabs') : __('No slabs in queue') }}
 			</div>
 
 			<div v-else>
-				<div v-for="item in slabsQueue" :key="item.name"
+				<div v-for="item in filteredSlabsQueue" :key="item.name"
 					@click="!(processStarted && !jobcardSubmitted) && selectSlab(item)" :class="[
 						'card pointer mb-2 shadow-sm slab-card border-0',
 						(processStarted && !jobcardSubmitted) ? 'btn-disabled-pointer' : ''
@@ -743,7 +740,7 @@ async function selectSlab(slab) {
 						</div>
 
 						<div class="text-center mb-2" v-if="processReady && !isPaused">
-							<button class="btn btn-success py-3 px-4" :disabled="isProcessing" @click="startOperation">
+							<button id="operator-start-job-btn" class="btn btn-success py-3 px-4" :disabled="isProcessing" @click="startOperation">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1 pr-2"></span>
 								<span v-else class="fa fa-play mr-1 pr-2"></span>{{ __('Start Job') }}
 							</button>
@@ -757,17 +754,17 @@ async function selectSlab(slab) {
 						</div>
 
 						<div class="text-center mb-2" v-if="processStarted">
-							<button class="btn btn-info py-3 px-4 mr-5" :disabled="isProcessing"
+							<button id="operator-finish-job-btn" class="btn btn-info py-3 px-4 mr-5" :disabled="isProcessing"
 								@click="finishOperation" v-if="!isPaused">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
 								<span v-else class="fa fa-check-square-o mr-2"></span>{{ __('Finish Job') }}
 							</button>
-							<button class="btn btn-warning py-3 px-4 mr-5" v-if="isPressing && !isPaused"
+							<button id="operator-repress-btn" class="btn btn-warning py-3 px-4 mr-5" v-if="isPressing && !isPaused"
 								:disabled="isProcessing" @click="repressSlab">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1"></span>
 								<span v-else class="fa fa-retweet mr-1"></span>{{ __('Re-press') }}
 							</button>
-							<button class="btn btn-success py-3 px-4" v-if="isPaused" :disabled="isProcessing"
+							<button id="operator-resume-job-btn" class="btn btn-success py-3 px-4" v-if="isPaused" :disabled="isProcessing"
 								@click="confirmResume">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1 pr-2"></span>
 								<span v-else class="fa fa-play mr-1 pr-2"></span>{{ __('Resume Job') }}
@@ -775,7 +772,7 @@ async function selectSlab(slab) {
 							<!-- <button class="btn btn-warning py-3 px-4 mr-5" @click="haltJob">
 							<span class="fa fa-pause-circle-o mr-1"></span>{{ __('Halt Job') }}
 						</button> -->
-							<button class="btn btn-primary py-3 px-4" @click="confirmPause" :disabled="isProcessing"
+							<button id="operator-pause-job-btn" class="btn btn-primary py-3 px-4" @click="confirmPause" :disabled="isProcessing"
 								v-if="!isPaused">
 								<span v-if="isProcessing" class="fa fa-spinner fa-spin mr-1 pr-2"></span>
 								<span v-else class="fa fa-pause mr-2"></span>{{ __('Pause Job') }}
@@ -974,4 +971,9 @@ async function selectSlab(slab) {
 .btn-disabled-pointer {
 	cursor: not-allowed;
 }
+
+.search-input {
+	border: 1px solid #c7c7c7;
+}
+
 </style>

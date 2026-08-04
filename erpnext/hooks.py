@@ -664,7 +664,54 @@ export_python_type_annotations = True
 
 fields_for_group_similar_items = ["qty", "amount"]
 fixtures = [
-	"Workspace",
+	{
+		"dt": "Workspace",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"Accounting",
+					"Administration",
+					"Administration Dashboard",
+					"Assets",
+					"Build",
+					"Buying",
+					"CRM",
+					"ERPNext Integrations",
+					"ERPNext Settings",
+					"Employee Lifecycle",
+					"Expense Claims",
+					"Financial Reports",
+					"GST India",
+					"HR",
+					"Home",
+					"Integrations",
+					"Invoices",
+					"Leaves",
+					"Manufacturing",
+					"Manufacturing Dashboard",
+					"Payables",
+					"Payroll",
+					"Performance",
+					"Projects",
+					"Quality",
+					"Receivables",
+					"Recruitment",
+					"Salary Payout",
+					"Selling",
+					"Shift & Attendance",
+					"Stock",
+					"Support",
+					"Tax & Benefits",
+					"Tools",
+					"Users",
+					"Website",
+					"Welcome Workspace",
+				],
+			]
+		],
+	},
 	{
 		"dt": "Custom Field",
 		"filters": [

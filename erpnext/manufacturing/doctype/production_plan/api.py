@@ -1,22 +1,57 @@
 import frappe
+from frappe.utils import cint
 
 
 @frappe.whitelist(allow_guest=True)
 def delete_job_cards(production_plan, reason, delete_all_job_cards, production_line=None, item_code=None):
-	mixing_work_orders = get_mixing_work_orders(production_plan, delete_all_job_cards, production_line, item_code)
-	deleted_count_limit = get_open_mixing_job_cards_count(mixing_work_orders)
+	# When "Delete All" is set we ignore the line/item scoping and act on every
+	# line the plan was planned on.
+	if cint(delete_all_job_cards):
+		production_line = None
+		item_code = None
 
-	if not deleted_count_limit:
-		frappe.throw("No Open Mixing Job Cards found to delete")
+	lines = get_production_lines(production_plan, production_line, item_code)
+	if not lines:
+		frappe.throw("No Production Lines found for this production plan")
 
-	target_work_orders = get_target_work_orders(production_plan, production_line, item_code)
-	job_cards_to_delete = get_open_job_cards_for_deletion(target_work_orders, deleted_count_limit)
+	# Each line is handled independently: a chain is only deleted on a line that
+	# still has at least one open Mixing job card. Lines whose mixing is already
+	# done keep their (legitimately open) downstream job cards untouched.
+	job_cards_to_delete = []
+	for line in lines:
+		mixing_work_orders = get_mixing_work_orders(production_plan, line, item_code)
+		deleted_count_limit = get_open_mixing_job_cards_count(mixing_work_orders)
+		if not deleted_count_limit:
+			continue
+
+		target_work_orders = get_target_work_orders(production_plan, line, item_code)
+		job_cards_to_delete.extend(
+			get_open_job_cards_for_deletion(target_work_orders, deleted_count_limit)
+		)
 
 	if not job_cards_to_delete:
-		frappe.throw("No Open Job Cards found to delete")
+		frappe.throw("No Open Mixing Job Cards found to delete")
+
+	user = frappe.session.user
+	frappe.publish_realtime(
+		"production_plan_delete_job_card_progress",
+		{"total": len(job_cards_to_delete), "production_plan": production_plan},
+		user=user,
+	)
 
 	for job_card in job_cards_to_delete:
 		frappe.delete_doc("Job Card", job_card.name)
+		frappe.publish_realtime(
+			"production_plan_delete_job_card_progress",
+			{"increment": 1, "production_plan": production_plan},
+			user=user,
+		)
+
+	frappe.publish_realtime(
+		"production_plan_delete_job_card_progress",
+		{"reload": True, "production_plan": production_plan},
+		user=user,
+	)
 
 	if production_line:
 		line_name = frappe.db.get_value("Production Line", production_line, "line_name")
@@ -32,17 +67,34 @@ def delete_job_cards(production_plan, reason, delete_all_job_cards, production_l
 	}
 
 
-def get_mixing_work_orders(production_plan, delete_all_job_cards, production_line, item_code):
+def get_production_lines(production_plan, production_line, item_code):
+	"""Return the list of production lines to act on.
+
+	When a specific line is requested we only return that one; otherwise we
+	return every distinct line the plan was actually planned on (optionally
+	narrowed by item)."""
+	if production_line:
+		return [production_line]
+
+	filters = {"production_plan": production_plan, "production_line": ["is", "set"]}
+	if item_code:
+		filters["production_item"] = ["like", f"%{item_code}%"]
+
+	rows = frappe.get_all(
+		"Work Order", filters=filters, fields=["production_line"], distinct=True
+	)
+	return [row.production_line for row in rows]
+
+
+def get_mixing_work_orders(production_plan, production_line, item_code):
 	filters = {
 		"production_plan": production_plan,
 		"wip_warehouse": ["like", "%Mixing%"],
+		"production_line": production_line,
 	}
 
-	if delete_all_job_cards != 1:
-		if production_line:
-			filters["production_line"] = production_line
-		if item_code:
-			filters["production_item"] = ["like", f"%{item_code}%"]
+	if item_code:
+		filters["production_item"] = ["like", f"%{item_code}%"]
 
 	return frappe.get_all("Work Order", filters=filters)
 
