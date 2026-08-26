@@ -520,12 +520,17 @@ def resolve_job_card_for_slab(
 ):
 	"""Authoritative, slab-aware resolver for the next Job Card of a slab.
 
-	Scopes candidates to the slab's own production plan, matching production
-	item (template) and line, then prefers the card already bound to the slab
-	and otherwise the earliest unbound card. Never returns a card bound to a
-	*different* slab. When ``for_update`` is set, the chosen card is locked so a
-	concurrent station cannot claim it; callers should immediately bind it
-	(``jc.slab = slab.name``).
+	A Job Card already bound to this slab (``Job Card.slab``) is ground truth and
+	is looked up directly first, independent of production-plan/work-order/line
+	scope: a corrective/repair card (e.g. a repolish card, made for one specific
+	slab by cloning its original job card) can legitimately live on a Work Order
+	that doesn't match the slab's derived plan or chain scope, and that scope
+	must never be able to exclude a card the slab is already explicitly attached
+	to. Only when there is no bound card does scope (the slab's own production
+	plan, matching item/line) narrow the search for the earliest *unbound*
+	candidate. Never returns a card bound to a *different* slab. When
+	``for_update`` is set, the chosen card is locked so a concurrent station
+	cannot claim it; callers should immediately bind it (``jc.slab = slab.name``).
 
 	``line``, when given (e.g. the bulk importer's explicit Production Line),
 	overrides ``slab.child_line`` for the line filter below.
@@ -533,38 +538,49 @@ def resolve_job_card_for_slab(
 	if isinstance(slab, str):
 		slab = frappe.get_doc("Slab", slab)  # pyright: ignore[reportAssignmentType]
 
-	# An explicit work-order list (e.g. from the bulk importer) takes precedence.
-	# Otherwise prefer the slab's own chain id, which pins candidates to exactly the
-	# Work Orders built for this slab; fall back to its production plan.
-	slab_group_id = None if work_orders else _get_slab_group_id(slab)
-	production_plan = (
-		None
-		if (ignore_production_plan or work_orders or slab_group_id)
-		else _get_slab_production_plan(slab)
-	)
-
-	# Line scope: explicit override, else the slab's child line, else its parent
-	# line expanded to child lines (job cards carry child lines). Previously a
-	# slab without a child_line lost the line filter entirely.
-	resolve_line = line or slab.child_line
-	if not resolve_line and slab.line:
-		child_lines = get_all_child_lines(slab.line)
-		resolve_line = child_lines if child_lines else slab.line
-
-	candidates = get_open_job_cards(
+	bound_candidates = get_open_job_cards(
 		process,
-		line=resolve_line,
 		include_wip=include_wip,
 		include_material_transferred=True,
 		include_paused=include_paused,
 		item_code=slab.template,
-		production_plan=production_plan,
-		slab_group_id=slab_group_id,
-		work_orders=work_orders,
+		slab=slab.name,
 	)
+	chosen = bound_candidates[0] if bound_candidates else None
 
-	bound = next((c for c in candidates if c.get("slab") == slab.name), None)
-	chosen = bound or next((c for c in candidates if not c.get("slab")), None)
+	if not chosen:
+		# An explicit work-order list (e.g. from the bulk importer) takes precedence.
+		# Otherwise prefer the slab's own chain id, which pins candidates to exactly the
+		# Work Orders built for this slab; fall back to its production plan.
+		slab_group_id = None if work_orders else _get_slab_group_id(slab)
+		production_plan = (
+			None
+			if (ignore_production_plan or work_orders or slab_group_id)
+			else _get_slab_production_plan(slab)
+		)
+
+		# Line scope: explicit override, else the slab's child line, else its parent
+		# line expanded to child lines (job cards carry child lines). Previously a
+		# slab without a child_line lost the line filter entirely.
+		resolve_line = line or slab.child_line
+		if not resolve_line and slab.line:
+			child_lines = get_all_child_lines(slab.line)
+			resolve_line = child_lines if child_lines else slab.line
+
+		candidates = get_open_job_cards(
+			process,
+			line=resolve_line,
+			include_wip=include_wip,
+			include_material_transferred=True,
+			include_paused=include_paused,
+			item_code=slab.template,
+			production_plan=production_plan,
+			slab_group_id=slab_group_id,
+			work_orders=work_orders,
+		)
+
+		chosen = next((c for c in candidates if not c.get("slab")), None)
+
 	if not chosen:
 		return None
 
