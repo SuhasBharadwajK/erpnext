@@ -20,6 +20,7 @@
   "current_job_card",
   "stock_item",
   "status",
+  "original_template",
   "is_cur_stage_complete",
   "is_paused",
   "is_repressed",
@@ -29,7 +30,6 @@
   "is_recalibrated",
   "is_3cm_to_2cm",
   "is_sample",
-  "updated_template",
   "quality_section",
   "grade",
   "column_break_e1da",
@@ -167,8 +167,9 @@
   },
   {
    "fieldname": "current_job_card",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Current Job Card",
+   "options": "Job Card",
    "read_only": 1
   },
   {
@@ -326,13 +327,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "updated_template",
-   "fieldtype": "Link",
-   "label": "Updated Template",
-   "options": "Slab Template",
-   "read_only": 1
-  },
-  {
    "default": "0",
    "depends_on": "eval:doc.is_sample;",
    "fieldname": "is_sample",
@@ -348,12 +342,19 @@
    "in_standard_filter": 1,
    "label": "Is 3cm to 2cm",
    "read_only": 1
+  },
+  {
+   "fieldname": "original_template",
+   "fieldtype": "Link",
+   "label": "Original Template",
+   "options": "Slab Template",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-02 22:17:04.039907",
+ "modified": "2026-08-29 15:15:57.566171",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Slab",

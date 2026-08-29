@@ -24,7 +24,7 @@ class Slab(Document):
 		container_number: DF.Data | None
 		crate_number: DF.Data | None
 		created_on: DF.Datetime | None
-		current_job_card: DF.Data | None
+		current_job_card: DF.Link | None
 		grade: DF.Link | None
 		is_3cm_to_2cm: DF.Check
 		is_cur_stage_complete: DF.Check
@@ -37,6 +37,7 @@ class Slab(Document):
 		is_sample: DF.Check
 		line: DF.Link
 		number: DF.Int
+		original_template: DF.Link | None
 		packing_date: DF.Date | None
 		packing_list_number: DF.Link | None
 		quality_assessment: DF.Link | None
@@ -47,7 +48,6 @@ class Slab(Document):
 		status: DF.Literal["Distribution", "Pressing", "Re-Pressing", "Heating", "Cooling", "Curing", "Trimming", "Calibration", "Polishing", "Quality Check", "Recovery", "Packed", "Shipped", "Delivered", "Discarded", "Rejected"]
 		stock_item: DF.Link | None
 		template: DF.Link
-		updated_template: DF.Link | None
 	# end: auto-generated types
 
 
