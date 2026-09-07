@@ -50,6 +50,8 @@ def transfer_to_next_process(
 	mixer_number=None,
 	work_orders=None,
 	line: str | None = None,
+	posting_date=None,
+	posting_time=None,
 ):
 	"""Transfer FG from Mixing → Next Process Source Warehouse.
 
@@ -57,6 +59,10 @@ def transfer_to_next_process(
 	also nested inside finish_process / the importer. @atomic_endpoint gives the
 	mixer path whole-operation deadlock retry; when nested it is a reentrant
 	pass-through that simply joins the enclosing transaction.
+
+	``posting_date``/``posting_time``, when given (the historical backfill
+	importer), backdate the transfer Stock Entry to the slab's Production Plan
+	Item date instead of now.
 
 	``work_orders``, when given (e.g. by the bulk importer against a specific
 	production plan), overrides the plan derived from ``current_work_order``:
@@ -221,6 +227,8 @@ def transfer_to_next_process(
 		t_warehouse=next_wo_doc.wip_warehouse,
 		job_card_item=job_card_item,
 		next_station=next_process or "",
+		posting_date=posting_date,
+		posting_time=posting_time,
 	)
 
 	job_card_item_doc = frappe.get_doc("Job Card Item", job_card_item)
@@ -644,6 +652,8 @@ def create_material_transfer_stock_entry(
 	t_warehouse: str,
 	job_card_item: str,
 	next_station: str,
+	posting_date=None,
+	posting_time=None,
 ):
 	stock_entry: StockEntry = frappe.new_doc("Stock Entry")  # pyright: ignore
 	stock_entry.purpose = "Material Transfer for Manufacture"
@@ -671,6 +681,13 @@ def create_material_transfer_stock_entry(
 	stock_entry.naming_series = MAT_TRANS_STOCK_ENTRY_NAMING_SERIES_MAP.get(next_station.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 	stock_entry.set_stock_entry_type()
 	stock_entry.set_missing_values()
+
+	# Historical backfill (importer's enforce_prod_plan_dates): backdate to the
+	# slab's Production Plan Item date instead of leaving Frappe default to now.
+	if posting_date:
+		stock_entry.set_posting_time = 1
+		stock_entry.posting_date = posting_date
+		stock_entry.posting_time = posting_time
 
 	# Deadlocks are handled at the endpoint level by run_atomic(), which rolls
 	# back and retries the whole operation. A fragment-level retry here would
