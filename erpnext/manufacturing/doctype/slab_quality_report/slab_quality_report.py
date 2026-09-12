@@ -30,6 +30,7 @@ class SlabQualityReport(Document):
 		date: DF.Date
 		filler_spot: DF.Data | None
 		grade: DF.Link | None
+		is_okd_by_gm: DF.Check
 		job_card: DF.Link
 		observations: DF.Table[SlabQualityObservation]
 		paper_deep_back: DF.Data | None

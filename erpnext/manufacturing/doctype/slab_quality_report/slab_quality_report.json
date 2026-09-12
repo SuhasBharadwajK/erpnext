@@ -44,6 +44,7 @@
         "column_break_hmsq",
         "repair",
         "grade",
+        "is_okd_by_gm",
         "use_for_samples",
         "column_break_0tsh",
         "recovery_type",
@@ -256,6 +257,14 @@
             "label": "Grade",
             "mandatory_depends_on": "eval: doc.repair && doc.repair == 'None';",
             "options": "Slab Quality Grade"
+        },
+        {
+            "allow_on_submit": 1,
+            "default": "0",
+            "depends_on": "eval: doc.repair && doc.repair == 'None' && doc.grade && doc.grade != 'Reject';",
+            "fieldname": "is_okd_by_gm",
+            "fieldtype": "Check",
+            "label": "Is OK'd by GM"
         },
         {
             "fieldname": "section_break_8ixs",
