@@ -121,7 +121,7 @@ def start_process(
 		if parent_line and parent_line != jc.production_line:
 			child_line = jc.production_line
 
-		slab_history = _get_mixing_slab_history(jc.name or "")
+		slab_history, is_trial = _get_mixing_slab_history(jc.name or "")
 		new_slab = create_slab(
 			parent_line or "",
 			child_line or "",
@@ -130,7 +130,9 @@ def start_process(
 			slab_history,
 			slab_number,
 			slab_batch_number,
+			is_trial,
 		)
+
 		slab_name = new_slab.name
 		slab_template = new_slab.template
 
@@ -746,4 +748,4 @@ def _get_mixing_slab_history(job_card_name: str):
 			slab_history_item.job_card_number = mixing_job_card.name if mixing_job_card else None
 			slab_history.append(slab_history_item)
 
-	return slab_history
+	return slab_history, mixing_job_card.is_trial  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]

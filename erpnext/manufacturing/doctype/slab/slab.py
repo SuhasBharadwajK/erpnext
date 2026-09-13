@@ -13,9 +13,8 @@ class Slab(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
 		from erpnext.manufacturing.doctype.slab_history.slab_history import SlabHistory
+		from frappe.types import DF
 
 		amended_from: DF.Link | None
 		batch_code: DF.Data | None
@@ -35,6 +34,7 @@ class Slab(Document):
 		is_repolished: DF.Check
 		is_repressed: DF.Check
 		is_sample: DF.Check
+		is_trial: DF.Check
 		line: DF.Link
 		number: DF.Int
 		original_template: DF.Link | None
