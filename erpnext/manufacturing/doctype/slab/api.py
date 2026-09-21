@@ -256,7 +256,7 @@ def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=Fal
 	return slabs
 
 
-LOOKUP_ALLOWED_STAGES = ALLOWED_STAGES[: ALLOWED_STAGES.index("Quality Check") + 1]
+LOOKUP_ALLOWED_STAGES = ALLOWED_STAGES[: ALLOWED_STAGES.index("Recovery") + 1]
 
 
 @frappe.whitelist()
