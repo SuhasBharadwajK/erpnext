@@ -47,6 +47,7 @@ def create_slab(
 	slab_history: list[SlabHistory] | None = None,
 	slab_number: int = 0,
 	batch_number: str | None = None,
+	is_trial: bool = False,
 ):
 	new_slab: Slab = frappe.new_doc("Slab")  # pyright: ignore[reportAssignmentType]
 	new_slab.line = line
@@ -55,6 +56,7 @@ def create_slab(
 	new_slab.current_job_card = job_card_number
 	new_slab.batch_number = batch_number or _generate_slab_batch(line, create_and_get=True)
 	new_slab.batch_code = new_slab.batch_number.split("/")[-1]
+	new_slab.is_trial = is_trial
 
 	slab_number = slab_number or _get_slab_number(new_slab.batch_number, line)
 	new_slab.number = slab_number
@@ -254,7 +256,7 @@ def get_slabs_for(line: str, next_stage: str, limit=1, include_current_stage=Fal
 	return slabs
 
 
-LOOKUP_ALLOWED_STAGES = ALLOWED_STAGES[: ALLOWED_STAGES.index("Quality Check") + 1]
+LOOKUP_ALLOWED_STAGES = ALLOWED_STAGES[: ALLOWED_STAGES.index("Recovery") + 1]
 
 
 @frappe.whitelist()

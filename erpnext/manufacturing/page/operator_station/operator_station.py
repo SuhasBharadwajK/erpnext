@@ -74,11 +74,21 @@ def start_process(
 	should_start_machine=True,
 	publish_slab_event=True,
 	skip_stage_validation=False,
+	posting_date=None,
+	posting_time=None,
 ):
-	"""Start the Job Card when mixing starts."""
+	"""Start the Job Card when mixing starts.
+
+	``posting_date``/``posting_time``, when given (the historical backfill
+	importer), backdate the job card's start-time log instead of using now.
+	"""
 
 	jc: JobCard = frappe.get_doc("Job Card", job_card)  # pyright: ignore[reportAssignmentType]
-	start_time = frappe.utils.now_datetime()  # pyright: ignore[reportAttributeAccessIssue]
+	start_time = (
+		frappe_utils.get_datetime(f"{posting_date} {posting_time}")
+		if posting_date
+		else frappe.utils.now_datetime()
+	)  # pyright: ignore[reportAttributeAccessIssue]
 	# employee_id = get_operators("Mixer Operator", jc.production_line)
 
 	args = {
@@ -111,7 +121,7 @@ def start_process(
 		if parent_line and parent_line != jc.production_line:
 			child_line = jc.production_line
 
-		slab_history = _get_mixing_slab_history(jc.name or "")
+		slab_history, is_trial = _get_mixing_slab_history(jc.name or "")
 		new_slab = create_slab(
 			parent_line or "",
 			child_line or "",
@@ -120,7 +130,9 @@ def start_process(
 			slab_history,
 			slab_number,
 			slab_batch_number,
+			is_trial,
 		)
+
 		slab_name = new_slab.name
 		slab_template = new_slab.template
 
@@ -281,8 +293,15 @@ def finish_process(
 	publish_slab_event=True,
 	work_orders=None,
 	line: str | None=None,
+	posting_date=None,
+	posting_time=None,
 ):
-	"""Complete the Job Card when mixing is finished."""
+	"""Complete the Job Card when mixing is finished.
+
+	``posting_date``/``posting_time``, when given (the historical backfill
+	importer), backdate the Manufacture Stock Entry, the job card's completion
+	time log, and the onward transfer_to_next_process call; unchanged when absent.
+	"""
 
 	if isinstance(transfer_materials, str):
 		transfer_materials = transfer_materials.lower() == "true"
@@ -293,9 +312,14 @@ def finish_process(
 	jc: JobCard = frappe.get_doc("Job Card", job_card)  # pyright: ignore[reportAssignmentType]
 	job_card_qty = flt(jc.total_completed_qty or jc.for_quantity, 3)
 
+	complete_time = (
+		frappe_utils.get_datetime(f"{posting_date} {posting_time}")
+		if posting_date
+		else frappe.utils.now_datetime()
+	)  # pyright: ignore[reportAttributeAccessIssue]
 	args = {
 		"job_card_id": jc.name,
-		"complete_time": frappe.utils.now_datetime(),  # pyright: ignore[reportAttributeAccessIssue]
+		"complete_time": complete_time,
 		"completed_qty": job_card_qty,
 		"status": "Completed",
 	}
@@ -365,6 +389,11 @@ def finish_process(
 		stock_entry_manufacture.naming_series = STOCK_ENTRY_NAMING_SERIES_MAP.get(process_name.lower(), "MAT-STE-.YYYY.-")  # pyright: ignore[reportAttributeAccessIssue]
 		stock_entry_manufacture.fg_completed_qty = job_card_qty
 
+		if posting_date:
+			stock_entry_manufacture.set_posting_time = 1
+			stock_entry_manufacture.posting_date = posting_date
+			stock_entry_manufacture.posting_time = posting_time
+
 		# Deadlocks are handled at the endpoint level by @atomic_endpoint, which
 		# rolls back and retries the whole operation; a fragment-level retry here
 		# would leave the job card / work order writes committed-in-progress.
@@ -386,6 +415,8 @@ def finish_process(
 			mixer_number=jc.mixer_number,
 			work_orders=work_orders,
 			line=line,
+			posting_date=posting_date,
+			posting_time=posting_time,
 		)
 
 	if should_stop_machine:
@@ -717,4 +748,4 @@ def _get_mixing_slab_history(job_card_name: str):
 			slab_history_item.job_card_number = mixing_job_card.name if mixing_job_card else None
 			slab_history.append(slab_history_item)
 
-	return slab_history
+	return slab_history, mixing_job_card.is_trial  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
