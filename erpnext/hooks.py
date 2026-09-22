@@ -673,7 +673,6 @@ fixtures = [
 				[
 					"Accounting",
 					"Administration",
-					"Administration Dashboard",
 					"Assets",
 					"Build",
 					"Buying",
@@ -690,7 +689,6 @@ fixtures = [
 					"Invoices",
 					"Leaves",
 					"Manufacturing",
-					"Manufacturing Dashboard",
 					"Payables",
 					"Payroll",
 					"Performance",
@@ -708,25 +706,6 @@ fixtures = [
 					"Users",
 					"Website",
 					"Welcome Workspace",
-				],
-			]
-		],
-	},
-	{
-		"dt": "Custom Field",
-		"filters": [
-			[
-				"name",
-				"in",
-				[
-					"Stock Entry Detail-inventory_dimension",
-					"Stock Entry Detail-inventory_dimension_col_break",
-					"Stock Entry Detail-slab_no",
-					"Stock Entry Detail-to_slab_no",
-					"Stock Ledger Entry-slab",
-					"Stock Ledger Entry-slab_quality_grade",
-					"Stock Entry Detail-slab_quality_grade",
-					"Stock Entry Detail-to_slab_grade",
 				],
 			]
 		],

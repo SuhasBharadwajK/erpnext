@@ -1,8 +1,0 @@
-.page-body {
-    /*background-color: var(--bg-light-gray);*/
-	width: 100% !important;
-}
-
-.page-body.container {
-	border-radius: 10px;
-}
