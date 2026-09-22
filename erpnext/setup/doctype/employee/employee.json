@@ -26,10 +26,6 @@
   "date_of_joining",
   "image",
   "status",
-  "manufacturing_section",
-  "production_line",
-  "column_break_xhpi",
-  "workstation_type",
   "erpnext_user",
   "user_id",
   "create_user",
@@ -74,7 +70,6 @@
   "relation",
   "attendance_and_leave_details",
   "attendance_device_id",
-  "attendance_shift",
   "column_break_44",
   "holiday_list",
   "salary_information",
@@ -821,33 +816,6 @@
    "fieldtype": "Data",
    "label": "IBAN",
    "options": "IBAN"
-  },
-  {
-   "fieldname": "attendance_shift",
-   "fieldtype": "Link",
-   "label": "Attendance Shift",
-   "options": "Attendance Shift"
-  },
-  {
-   "fieldname": "production_line",
-   "fieldtype": "Link",
-   "label": "Production Line",
-   "options": "Production Line"
-  },
-  {
-   "fieldname": "workstation_type",
-   "fieldtype": "Link",
-   "label": "Workstation Type",
-   "options": "Workstation"
-  },
-  {
-   "fieldname": "manufacturing_section",
-   "fieldtype": "Section Break",
-   "label": "Manufacturing"
-  },
-  {
-   "fieldname": "column_break_xhpi",
-   "fieldtype": "Column Break"
   }
  ],
  "icon": "fa fa-user",
