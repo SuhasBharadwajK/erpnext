@@ -28,7 +28,7 @@ from frappe.model.mapper import get_mapped_doc
 from erpnext.manufacturing.doctype.bom.bom import get_children as get_bom_children
 from erpnext.manufacturing.doctype.bom.bom import validate_bom_no
 from erpnext.manufacturing.doctype.work_order.work_order import get_item_details
-from erpnext.manufacturing.doctype.production_line.constants import CHILD_LINES
+from spl_mods.slab_manufacturing.doctype.production_line.constants import CHILD_LINES
 from erpnext.setup.doctype.item_group.item_group import get_item_group_defaults
 from erpnext.stock.get_item_details import get_conversion_factor
 from erpnext.stock.utils import get_or_make_bin

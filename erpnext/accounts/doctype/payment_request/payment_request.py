@@ -553,8 +553,7 @@ def make_payment_request(**args):
 		args.company = ref_doc.company
 	gateway_account = get_gateway_details(args) or frappe._dict()
 
-	amount_to_pay = args.get("amount_to_pay", 0)
-	grand_total = amount_to_pay or get_amount(ref_doc, gateway_account.get("payment_account"))
+	grand_total = get_amount(ref_doc, gateway_account.get("payment_account"))
 	if not grand_total:
 		frappe.throw(_("Payment Entry is already created"))
 	if args.loyalty_points and args.dt == "Sales Order":
@@ -570,8 +569,8 @@ def make_payment_request(**args):
 	# fetches existing payment request `grand_total` amount
 	existing_payment_request_amount = get_existing_payment_request_amount(ref_doc)
 
-	def validate_and_calculate_grand_total(grand_total, existing_payment_request_amount, amount_to_pay = 0):
-		grand_total = (grand_total - existing_payment_request_amount) if not amount_to_pay else amount_to_pay
+	def validate_and_calculate_grand_total(grand_total, existing_payment_request_amount):
+		grand_total -= existing_payment_request_amount
 		if not grand_total:
 			frappe.throw(_("Payment Request is already created"))
 		return grand_total
@@ -582,12 +581,12 @@ def make_payment_request(**args):
 			if get_existing_payment_request_amount(
 				ref_doc, ["Initiated", "Partially Paid", "Payment Ordered", "Paid"]
 			):
-				grand_total = validate_and_calculate_grand_total(grand_total, existing_payment_request_amount, amount_to_pay)
+				grand_total = validate_and_calculate_grand_total(grand_total, existing_payment_request_amount)
 			else:
 				# If PR's are processed, cancel all of them.
 				cancel_old_payment_requests(ref_doc.doctype, ref_doc.name)
 		else:
-			grand_total = validate_and_calculate_grand_total(grand_total, existing_payment_request_amount, amount_to_pay)
+			grand_total = validate_and_calculate_grand_total(grand_total, existing_payment_request_amount)
 
 	draft_payment_request = frappe.db.get_value(
 		"Payment Request",

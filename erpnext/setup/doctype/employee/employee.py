@@ -37,7 +37,6 @@ class Employee(NestedSet):
 		from frappe.types import DF
 
 		attendance_device_id: DF.Data | None
-		attendance_shift: DF.Link | None
 		bank_ac_no: DF.Data | None
 		bank_name: DF.Data | None
 		bio: DF.TextEditor | None
@@ -92,7 +91,6 @@ class Employee(NestedSet):
 		place_of_issue: DF.Data | None
 		prefered_contact_email: DF.Literal["", "Company Email", "Personal Email", "User ID"]
 		prefered_email: DF.Data | None
-		production_line: DF.Link | None
 		reason_for_leaving: DF.SmallText | None
 		relation: DF.Data | None
 		relieving_date: DF.Date | None
@@ -107,7 +105,6 @@ class Employee(NestedSet):
 		unsubscribed: DF.Check
 		user_id: DF.Link | None
 		valid_upto: DF.Date | None
-		workstation_type: DF.Link | None
 	# end: auto-generated types
 	nsm_parent_field = "reports_to"
 

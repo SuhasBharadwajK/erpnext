@@ -99,12 +99,7 @@
   "subscription_section",
   "auto_repeat",
   "amended_from",
-  "title",
-  "tally_references_section",
-  "tally_guid",
-  "tally_voucher_type",
-  "column_break_0ehw",
-  "tally_voucher_number"
+  "title"
  ],
  "fields": [
   {
@@ -222,6 +217,7 @@
    "read_only": 1
   },
   {
+   "collapsible": 1,
    "fieldname": "payment_accounts_section",
    "fieldtype": "Section Break",
    "label": "Accounts"
@@ -441,7 +437,7 @@
   {
    "fieldname": "transaction_references",
    "fieldtype": "Section Break",
-   "label": "Transaction References"
+   "label": "Transaction ID"
   },
   {
    "bold": 1,
@@ -790,34 +786,6 @@
    "options": "No\nYes",
    "print_hide": 1,
    "search_index": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "tally_references_section",
-   "fieldtype": "Section Break",
-   "label": "Tally References"
-  },
-  {
-   "fieldname": "tally_guid",
-   "fieldtype": "Data",
-   "label": "GUID",
-   "read_only": 1
-  },
-  {
-   "fieldname": "tally_voucher_type",
-   "fieldtype": "Data",
-   "label": "Voucher Type",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_0ehw",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "tally_voucher_number",
-   "fieldtype": "Data",
-   "label": "Voucher Number",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -832,7 +800,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2026-02-24 14:22:19.788499",
+ "modified": "2025-05-15 18:01:04.013025",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",

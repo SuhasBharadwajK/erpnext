@@ -161,10 +161,6 @@ frappe.query_reports["Accounts Payable"] = {
 	},
 
 	onload: function (report) {
-		report.page.add_inner_button(__("Create Payment Order"), function () {
-			select_invoices_for_bulk_payment(report);
-		});
-
 		report.page.add_inner_button(__("Accounts Payable Summary"), function () {
 			var filters = report.get_values();
 			frappe.set_route("query-report", "Accounts Payable Summary", { company: filters.company });
@@ -189,16 +185,3 @@ function get_party_type_options() {
 		});
 	return options;
 }
-
-const select_invoices_for_bulk_payment = function (report) {
-	const invoices = report.data.filter(d => d.voucher_no).map(d => {
-		return {
-			name: d.voucher_no,
-			doctype: d.voucher_type,
-			supplier: d.supplier_name,
-			outstanding_amount: d.outstanding,
-		}
-	});
-
-	frappe.show_bulk_payment_dialog(invoices, true, "Purchase Invoice", report);
-};

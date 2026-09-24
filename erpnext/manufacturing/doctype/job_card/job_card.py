@@ -4,7 +4,7 @@ import datetime
 import json
 from collections import OrderedDict
 
-from erpnext.manufacturing.doctype.production_line.production_line import get_parent_line
+from spl_mods.slab_manufacturing.doctype.production_line.production_line import get_parent_line
 import frappe
 from frappe import _, bold
 from frappe.model.document import Document

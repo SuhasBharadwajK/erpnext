@@ -48,8 +48,9 @@ class JournalEntry(AccountsController):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from erpnext.accounts.doctype.journal_entry_account.journal_entry_account import JournalEntryAccount
 		from frappe.types import DF
+
+		from erpnext.accounts.doctype.journal_entry_account.journal_entry_account import JournalEntryAccount
 
 		accounts: DF.Table[JournalEntryAccount]
 		amended_from: DF.Link | None
@@ -78,14 +79,10 @@ class JournalEntry(AccountsController):
 		payment_order: DF.Link | None
 		posting_date: DF.Date
 		process_deferred_accounting: DF.Link | None
-		ref_guid: DF.Data | None
 		remark: DF.SmallText | None
 		reversal_of: DF.Link | None
 		select_print_heading: DF.Link | None
 		stock_entry: DF.Link | None
-		tally_guid: DF.Data | None
-		tally_voucher_number: DF.Data | None
-		tally_voucher_type: DF.Data | None
 		tax_withholding_category: DF.Link | None
 		title: DF.Data | None
 		total_amount: DF.Currency
@@ -94,7 +91,24 @@ class JournalEntry(AccountsController):
 		total_credit: DF.Currency
 		total_debit: DF.Currency
 		user_remark: DF.SmallText | None
-		voucher_type: DF.Literal["Journal Entry", "Inter Company Journal Entry", "Bank Entry", "Cash Entry", "Credit Card Entry", "Debit Note", "Credit Note", "Contra Entry", "Excise Entry", "Write Off Entry", "Opening Entry", "Depreciation Entry", "Exchange Rate Revaluation", "Exchange Gain Or Loss", "Deferred Revenue", "Deferred Expense"]
+		voucher_type: DF.Literal[
+			"Journal Entry",
+			"Inter Company Journal Entry",
+			"Bank Entry",
+			"Cash Entry",
+			"Credit Card Entry",
+			"Debit Note",
+			"Credit Note",
+			"Contra Entry",
+			"Excise Entry",
+			"Write Off Entry",
+			"Opening Entry",
+			"Depreciation Entry",
+			"Exchange Rate Revaluation",
+			"Exchange Gain Or Loss",
+			"Deferred Revenue",
+			"Deferred Expense",
+		]
 		write_off_amount: DF.Currency
 		write_off_based_on: DF.Literal["Accounts Receivable", "Accounts Payable"]
 	# end: auto-generated types
@@ -221,16 +235,7 @@ class JournalEntry(AccountsController):
 		self.update_booked_depreciation(1)
 
 	def get_title(self):
-		# return self.pay_to_recd_from or self.accounts[0].account
-		for row in self.accounts:
-			if row.debit and row.debit > 0 and row.account:
-				return row.account
-
-		# fallback – old ERPNext default behavior if no debit found
-		if self.accounts:
-			return self.accounts[0].account
-
-		return self.name
+		return self.pay_to_recd_from or self.accounts[0].account
 
 	def validate_inter_company_accounts(self):
 		if self.voucher_type == "Inter Company Journal Entry" and self.inter_company_journal_entry_reference:
