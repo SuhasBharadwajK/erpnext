@@ -2,18 +2,25 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Slab", {
-	refresh(frm) {
-		add_custom_badge(frm);
-	},
+    refresh(frm) {
+        add_custom_badge(frm);
+    },
 });
 
 
 function add_custom_badge(frm) {
     // Remove previous custom badge to avoid duplicates
-    let label = '';
-	let color = '';
+    // let label = '';
+    // let color = '';
+    const $wrapper = frm.page.wrapper;
+    $wrapper.find(".pause-pill, .stage-pill").remove();
+    const $last_indicator = $wrapper.find(".indicator-pill").last();
 
-	if (frm.doc.is_paused === 1) {
+    if (!$last_indicator.length) {
+        return;
+    }
+
+    if (frm.doc.is_paused === 1) {
         label = __('Paused');
         color = 'yellow';
 
@@ -25,9 +32,9 @@ function add_custom_badge(frm) {
 
         frm.page.wrapper.find('.indicator-pill').last().after(badge);
     }
-	else {
-		frm.page.wrapper.find('.pause-pill').last().remove();
-	}
+    else {
+        frm.page.wrapper.find('.pause-pill').last().remove();
+    }
 
     if (frm.doc.is_cur_stage_complete) {
         label = __('Completed');
@@ -39,8 +46,8 @@ function add_custom_badge(frm) {
         `);
 
         frm.page.wrapper.find('.indicator-pill').last().before(status_badge);
-	}
-	else {
-		frm.page.wrapper.find('.stage-pill').last().remove();
-	}
+    }
+    else {
+        frm.page.wrapper.find('.stage-pill').last().remove();
+    }
 }
