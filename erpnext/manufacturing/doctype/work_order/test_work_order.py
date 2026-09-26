@@ -3342,7 +3342,7 @@ def prepare_boms_for_sub_assembly_test():
 
 
 def prepare_data_for_workstation_type_check():
-	from erpnext.manufacturing.doctype.operation.test_operation import make_operation
+	from spl_mods.slab_manufacturing.doctype.operation.test_operation import make_operation
 	from erpnext.manufacturing.doctype.workstation.test_workstation import make_workstation
 	from erpnext.manufacturing.doctype.workstation_type.test_workstation_type import (
 		create_workstation_type,

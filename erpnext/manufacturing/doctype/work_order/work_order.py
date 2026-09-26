@@ -39,7 +39,7 @@ from erpnext.stock.doctype.serial_no.serial_no import get_available_serial_nos, 
 from erpnext.stock.stock_balance import get_planned_qty, update_bin_qty
 from erpnext.stock.utils import get_bin, get_latest_stock_qty, validate_warehouse_company
 from erpnext.utilities.transaction_base import validate_uom_is_integer
-from erpnext.manufacturing.doctype.manufacturing_process.constants import ALL_MFG_PROCESSES
+from spl_mods.slab_manufacturing.doctype.manufacturing_process.constants import ALL_MFG_PROCESSES
 
 
 class OverProductionError(frappe.ValidationError):
@@ -572,7 +572,7 @@ class WorkOrder(Document):
 		self.create_serial_no_batch_no()
 
 	def on_submit(self):
-		from erpnext.manufacturing.doctype.manufacturing_process.constants import ALL_MFG_PROCESSES
+		from spl_mods.slab_manufacturing.doctype.manufacturing_process.constants import ALL_MFG_PROCESSES
 
 		item_lower = (self.production_item or "").lower()
 

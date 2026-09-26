@@ -199,11 +199,6 @@
   "inter_company_invoice_reference",
   "is_old_subcontracting_flow",
   "remarks",
-  "tally_reference_section",
-  "tally_guid",
-  "tally_voucher_type",
-  "column_break_3hyr",
-  "tally_voucher_number",
   "connections_tab"
  ],
  "fields": [
@@ -287,7 +282,7 @@
    "default": "0",
    "fieldname": "apply_tds",
    "fieldtype": "Check",
-   "label": "Apply Tax Withholding Amount (TDS)",
+   "label": "Apply Tax Withholding Amount",
    "print_hide": 1
   },
   {
@@ -1657,34 +1652,6 @@
    "fieldtype": "Data",
    "is_virtual": 1,
    "label": "Last Scanned Warehouse"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "tally_reference_section",
-   "fieldtype": "Section Break",
-   "label": "Tally References"
-  },
-  {
-   "fieldname": "tally_guid",
-   "fieldtype": "Data",
-   "label": "GUID",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_3hyr",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "tally_voucher_type",
-   "fieldtype": "Data",
-   "label": "Voucher Type",
-   "read_only": 1
-  },
-  {
-   "fieldname": "tally_voucher_number",
-   "fieldtype": "Data",
-   "label": "Voucher Number",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -1692,7 +1659,7 @@
  "idx": 204,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-02-12 19:23:25.126977",
+ "modified": "2025-08-04 19:19:11.380664",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Purchase Invoice",
