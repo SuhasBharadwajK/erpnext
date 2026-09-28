@@ -14,12 +14,9 @@
   "is_group",
   "parent_warehouse",
   "is_rejected_warehouse",
-  "production_line",
-  "is_standalone",
   "column_break_4",
   "account",
   "company",
-  "mfg_process_type",
   "address_and_contact",
   "address_html",
   "column_break_10",
@@ -260,25 +257,6 @@
    "fieldname": "is_rejected_warehouse",
    "fieldtype": "Check",
    "label": "Is Rejected Warehouse"
-  },
-  {
-   "fieldname": "mfg_process_type",
-   "fieldtype": "Link",
-   "label": "Process",
-   "options": "Manufacturing Process"
-  },
-  {
-   "fieldname": "production_line",
-   "fieldtype": "Link",
-   "label": "Production Line",
-   "options": "Production Line"
-  },
-  {
-   "default": "0",
-   "description": "Check this if manual slab loading is required at this workstation",
-   "fieldname": "is_standalone",
-   "fieldtype": "Check",
-   "label": "Is Standalone"
   }
  ],
  "grid_page_length": 50,
