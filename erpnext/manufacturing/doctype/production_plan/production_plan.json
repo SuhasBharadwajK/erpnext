@@ -28,6 +28,10 @@
   "material_request_detail",
   "get_material_request",
   "material_requests",
+  "select_items_to_manufacture_section",
+  "get_items",
+  "combine_items",
+  "po_items",
   "section_break_25",
   "prod_plan_references",
   "section_break_24",
@@ -189,6 +193,25 @@
    "options": "Production Plan Material Request"
   },
   {
+   "fieldname": "select_items_to_manufacture_section",
+   "fieldtype": "Section Break",
+   "label": "Select Items to Manufacture"
+  },
+  {
+   "depends_on": "eval:doc.get_items_from && doc.docstatus == 0",
+   "fieldname": "get_items",
+   "fieldtype": "Button",
+   "label": "Get Finished Goods for Manufacture"
+  },
+  {
+   "fieldname": "po_items",
+   "fieldtype": "Table",
+   "label": "Assembly Items",
+   "no_copy": 1,
+   "options": "Production Plan Item",
+   "reqd": 1
+  },
+  {
    "fieldname": "material_request_planning",
    "fieldtype": "Section Break",
    "label": "Material Request Planning"
@@ -313,6 +336,13 @@
    "fieldname": "include_safety_stock",
    "fieldtype": "Check",
    "label": "Include Safety Stock in Required Qty Calculation"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.get_items_from == 'Sales Order'",
+   "fieldname": "combine_items",
+   "fieldtype": "Check",
+   "label": "Consolidate Sales Order Items"
   },
   {
    "fieldname": "section_break_25",

@@ -626,7 +626,6 @@
    "role": "Stock User"
   }
  ],
- "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "ASC",
  "states": [],
