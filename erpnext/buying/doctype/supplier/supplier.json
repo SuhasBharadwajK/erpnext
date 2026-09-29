@@ -18,12 +18,6 @@
   "supplier_type",
   "is_transporter",
   "image",
-  "msme_details_section",
-  "msme_no",
-  "column_break_vmng",
-  "major_msme_activity",
-  "column_break_srdt",
-  "msme_size",
   "defaults_section",
   "default_currency",
   "default_bank_account",
@@ -479,36 +473,6 @@
   {
    "fieldname": "column_break_mglr",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "msme_details_section",
-   "fieldtype": "Section Break",
-   "label": "MSME Details"
-  },
-  {
-   "fieldname": "msme_no",
-   "fieldtype": "Data",
-   "label": "MSME No."
-  },
-  {
-   "fieldname": "column_break_vmng",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "major_msme_activity",
-   "fieldtype": "Link",
-   "label": "Major Activity",
-   "options": "MSME Activity"
-  },
-  {
-   "fieldname": "column_break_srdt",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "msme_size",
-   "fieldtype": "Link",
-   "label": "Size",
-   "options": "MSME Size"
   }
  ],
  "icon": "fa fa-user",

@@ -128,9 +128,6 @@ class StockEntry(StockController):
 		scan_barcode: DF.Data | None
 		select_print_heading: DF.Link | None
 		set_posting_time: DF.Check
-		slab_batch_no: DF.Data | None
-		slab_grade: DF.Data | None
-		slab_serial_no: DF.Data | None
 		source_address_display: DF.SmallText | None
 		source_warehouse_address: DF.Link | None
 		stock_entry_type: DF.Link

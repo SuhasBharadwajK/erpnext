@@ -172,7 +172,7 @@
   },
   {
    "fieldname": "opening_number_of_booked_depreciations",
-   "fieldtype": "Float",
+   "fieldtype": "Int",
    "hidden": 1,
    "label": "Opening Number of Booked Depreciations",
    "print_hide": 1,
