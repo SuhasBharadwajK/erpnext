@@ -4,7 +4,6 @@ import datetime
 import json
 from collections import OrderedDict
 
-from spl_mods.slab_manufacturing.doctype.production_line.production_line import get_parent_line
 import frappe
 from frappe import _, bold
 from frappe.model.document import Document
@@ -58,16 +57,18 @@ class JobCard(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from frappe.types import DF
+
 		from erpnext.manufacturing.doctype.job_card_item.job_card_item import JobCardItem
 		from erpnext.manufacturing.doctype.job_card_operation.job_card_operation import JobCardOperation
-		from erpnext.manufacturing.doctype.job_card_scheduled_time.job_card_scheduled_time import JobCardScheduledTime
+		from erpnext.manufacturing.doctype.job_card_scheduled_time.job_card_scheduled_time import (
+			JobCardScheduledTime,
+		)
 		from erpnext.manufacturing.doctype.job_card_scrap_item.job_card_scrap_item import JobCardScrapItem
 		from erpnext.manufacturing.doctype.job_card_time_log.job_card_time_log import JobCardTimeLog
-		from frappe.types import DF
 
 		actual_end_date: DF.Datetime | None
 		actual_start_date: DF.Datetime | None
-		additional_ingredients_added: DF.Check
 		amended_from: DF.Link | None
 		barcode: DF.Barcode | None
 		batch_no: DF.Link | None
@@ -82,20 +83,16 @@ class JobCard(Document):
 		for_quantity: DF.Float
 		hour_rate: DF.Currency
 		is_corrective_job_card: DF.Check
-		is_finished: DF.Check
 		item_name: DF.ReadOnly | None
 		items: DF.Table[JobCardItem]
 		job_started: DF.Check
-		mixer_number: DF.Link | None
 		naming_series: DF.Literal["PO-JOB.#####"]
 		operation: DF.Link
 		operation_id: DF.Data | None
 		operation_row_number: DF.Literal[None]
 		posting_date: DF.Date | None
-		priority: DF.Int
 		process_loss_qty: DF.Float
 		production_item: DF.Link | None
-		production_line: DF.Link | None
 		project: DF.Link | None
 		quality_inspection: DF.Link | None
 		quality_inspection_template: DF.Link | None
@@ -106,10 +103,17 @@ class JobCard(Document):
 		sequence_id: DF.Int
 		serial_and_batch_bundle: DF.Link | None
 		serial_no: DF.SmallText | None
-		slab: DF.Link | None
-		slab_template: DF.Link | None
 		started_time: DF.Datetime | None
-		status: DF.Literal["Open", "Work In Progress", "Material Transferred", "On Hold", "Submitted", "Cancelled", "Completed"]
+		status: DF.Literal[
+			"Open",
+			"Work In Progress",
+			"Partially Transferred",
+			"Material Transferred",
+			"On Hold",
+			"Submitted",
+			"Cancelled",
+			"Completed",
+		]
 		sub_operations: DF.Table[JobCardOperation]
 		time_logs: DF.Table[JobCardTimeLog]
 		time_required: DF.Float
@@ -128,50 +132,11 @@ class JobCard(Document):
 		self.set_onload("work_order_closed", self.is_work_order_closed())
 		self.set_onload("has_stock_entry", self.has_stock_entry())
 
-	def before_naming(self):
-		if self.work_order:
-			wo = frappe.get_doc("Work Order", self.work_order)
-			if wo.production_line:
-				year = frappe.utils.today()[:4]
-				self.naming_series = f"PO-{wo.production_line}-JOB.#####"
-
 	def has_stock_entry(self):
 		return frappe.db.exists("Stock Entry", {"job_card": self.name, "docstatus": ["!=", 2]})
 
 	def before_validate(self):
 		self.set_wip_warehouse()
-
-	def set_workstation(self):
-		if not self.operation or not self.production_line:
-			return
-
-		workstation_type = self.operation.split()[0]
-		parent_line = get_parent_line(self.production_line)
-		
-		workstation = frappe.db.get_value(
-			"Workstation",
-			{
-				"workstation_type": ["like", f"{workstation_type}%"],
-				"production_line": self.production_line,
-			},
-			["name", "workstation_type"],
-			as_dict=True,
-		)
-
-		if not workstation and parent_line:
-			workstation = frappe.db.get_value(
-			"Workstation",
-			{
-				"workstation_type": self.operation,
-				"production_line": parent_line,
-			},
-			["name", "workstation_type"],
-			as_dict=True,
-		)
-
-		if workstation:
-			self.workstation = workstation.name
-			self.workstation_type = workstation.workstation_type
 
 	def validate(self):
 		self.validate_time_logs()
@@ -317,9 +282,8 @@ class JobCard(Document):
 		# if key number reaches/crosses to production_capacity means capacity is full and overlap error generated
 		# this will store last to_time of sequential job cards
 		alloted_capacity = {1: time_logs[0]["to_time"]}
-		# flag for sequential Job card found
-		sequential_job_card_found = False
 		for i in range(1, len(time_logs)):
+			sequential_job_card_found = False
 			# scanning for all Existing keys
 			for key in alloted_capacity.keys():
 				# if current Job Card from time is greater than last to_time in that key means these job card are sequential
@@ -549,6 +513,8 @@ class JobCard(Document):
 			)
 
 	def add_time_log(self, args):
+		self.validate_transfer_qty()
+
 		last_row = []
 		employees = args.employees
 		if isinstance(employees, str):
@@ -789,9 +755,10 @@ class JobCard(Document):
 
 	def set_process_loss(self):
 		precision = self.precision("total_completed_qty")
+		should_set_process_loss = self.total_completed_qty or self.process_loss_qty
 
 		self.process_loss_qty = 0.0
-		if self.total_completed_qty and self.for_quantity > self.total_completed_qty:
+		if should_set_process_loss and self.for_quantity > self.total_completed_qty:
 			self.process_loss_qty = flt(self.for_quantity, precision) - flt(
 				self.total_completed_qty, precision
 			)
@@ -964,6 +931,8 @@ class JobCard(Document):
 
 			frappe.db.set_value("Job Card Item", row.job_card_item, "transferred_qty", flt(transferred_qty))
 
+		self.set_status(update_status=True)
+
 	def set_transferred_qty(self, update_status=False):
 		"Set total FG Qty in Job Card for which RM was transferred."
 		if not self.items:
@@ -1017,7 +986,22 @@ class JobCard(Document):
 		self.status = {0: "Open", 1: "Submitted", 2: "Cancelled"}[self.docstatus or 0]
 
 		if self.docstatus < 2:
-			if flt(self.for_quantity) <= flt(self.transferred_qty):
+			if self.items:
+				item_data = frappe.get_all(
+					"Job Card Item",
+					filters={"parent": self.name},
+					fields=["transferred_qty", "required_qty"],
+				)
+				all_transferred = item_data and all(
+					flt(d.transferred_qty) >= flt(d.required_qty) for d in item_data
+				)
+				any_transferred = any(flt(d.transferred_qty) > 0 for d in item_data)
+
+				if all_transferred:
+					self.status = "Material Transferred"
+				elif any_transferred:
+					self.status = "Partially Transferred"
+			elif flt(self.for_quantity) <= flt(self.transferred_qty):
 				self.status = "Material Transferred"
 
 			if self.time_logs:
@@ -1112,9 +1096,9 @@ class JobCard(Document):
 
 	def is_work_order_closed(self):
 		if self.work_order:
-			status = frappe.get_value("Work Order", self.work_order)
+			status = frappe.get_value("Work Order", self.work_order, "status")
 
-			if status == "Closed":
+			if status in ["Closed", "Stopped"]:
 				return True
 
 		return False
@@ -1199,7 +1183,7 @@ def make_material_request(source_name, target_doc=None):
 
 
 @frappe.whitelist()
-def make_stock_entry(source_name, target_doc=None):
+def make_stock_entry(source_name: str, target_doc: Document | str | None = None):
 	def update_item(source, target, source_parent):
 		target.t_warehouse = source_parent.wip_warehouse
 
@@ -1211,6 +1195,9 @@ def make_stock_entry(source_name, target_doc=None):
 			target.qty = pending_rm_qty
 
 	def set_missing_values(source, target):
+		if not source.items:
+			frappe.throw(_("This Job Card has no raw materials to transfer."))
+
 		target.purpose = "Material Transfer for Manufacture"
 		target.from_bom = 1
 
@@ -1261,12 +1248,13 @@ def time_diff_in_minutes(string_ed_date, string_st_date):
 
 
 @frappe.whitelist()
-def get_job_details(start, end, filters=None):
+def get_job_details(start: str, end: str, filters: str | None = None):
 	events = []
 
 	event_color = {
 		"Completed": "#cdf5a6",
 		"Material Transferred": "#ffdd9e",
+		"Partially Transferred": "#ffe5b4",
 		"Work In Progress": "#D3D3D3",
 	}
 

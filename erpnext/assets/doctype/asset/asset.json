@@ -539,7 +539,7 @@
   {
    "depends_on": "eval:(doc.is_existing_asset)",
    "fieldname": "opening_number_of_booked_depreciations",
-   "fieldtype": "Float",
+   "fieldtype": "Int",
    "label": "Opening Number of Booked Depreciations"
   },
   {

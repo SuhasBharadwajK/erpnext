@@ -48,10 +48,7 @@ class Supplier(TransactionBase):
 		is_internal_supplier: DF.Check
 		is_transporter: DF.Check
 		language: DF.Link | None
-		major_msme_activity: DF.Link | None
 		mobile_no: DF.ReadOnly | None
-		msme_no: DF.Data | None
-		msme_size: DF.Link | None
 		naming_series: DF.Literal["SUP-.YYYY.-"]
 		on_hold: DF.Check
 		payment_terms: DF.Link | None

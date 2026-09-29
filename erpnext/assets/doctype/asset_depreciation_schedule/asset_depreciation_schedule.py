@@ -47,7 +47,7 @@ class AssetDepreciationSchedule(Document):
 		naming_series: DF.Literal["ACC-ADS-.YYYY.-"]
 		notes: DF.SmallText | None
 		opening_accumulated_depreciation: DF.Currency
-		opening_number_of_booked_depreciations: DF.Float
+		opening_number_of_booked_depreciations: DF.Int
 		rate_of_depreciation: DF.Percent
 		shift_based: DF.Check
 		status: DF.Literal["Draft", "Active", "Cancelled"]

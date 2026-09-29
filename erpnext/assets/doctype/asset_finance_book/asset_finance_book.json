@@ -39,7 +39,7 @@
   {
    "columns": 2,
    "fieldname": "total_number_of_depreciations",
-   "fieldtype": "Float",
+   "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Total Number of Depreciations",
    "reqd": 1
@@ -110,7 +110,7 @@
   {
    "default": "0",
    "fieldname": "total_number_of_booked_depreciations",
-   "fieldtype": "Float",
+   "fieldtype": "Int",
    "label": "Total Number of Booked Depreciations ",
    "read_only": 1
   }

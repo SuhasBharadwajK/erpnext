@@ -56,7 +56,6 @@ class Workstation(Document):
 		on_status_image: DF.AttachImage | None
 		plant_floor: DF.Link | None
 		production_capacity: DF.Int
-		production_line: DF.Link | None
 		status: DF.Literal["Production", "Off", "Idle", "Problem", "Maintenance", "Setup"]
 		total_working_hours: DF.Float
 		warehouse: DF.Link | None

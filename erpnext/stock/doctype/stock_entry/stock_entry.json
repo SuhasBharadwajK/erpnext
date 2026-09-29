@@ -26,9 +26,6 @@
   "posting_date",
   "posting_time",
   "column_break_eaoa",
-  "slab_grade",
-  "slab_serial_no",
-  "slab_batch_no",
   "set_posting_time",
   "inspection_required",
   "apply_putaway_rule",
@@ -702,24 +699,6 @@
    "fieldtype": "Data",
    "is_virtual": 1,
    "label": "Last Scanned Warehouse"
-  },
-  {
-   "fieldname": "slab_grade",
-   "fieldtype": "Data",
-   "label": "Slab Grade",
-   "read_only": 1
-  },
-  {
-   "fieldname": "slab_serial_no",
-   "fieldtype": "Data",
-   "label": "Slab Serial No",
-   "read_only": 1
-  },
-  {
-   "fieldname": "slab_batch_no",
-   "fieldtype": "Data",
-   "label": "Slab Batch No",
-   "read_only": 1
   }
  ],
  "icon": "fa fa-file-text",

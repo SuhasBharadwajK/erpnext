@@ -89,7 +89,7 @@ class Asset(AccountsController):
 		naming_series: DF.Literal["ACC-ASS-.YYYY.-"]
 		next_depreciation_date: DF.Date | None
 		opening_accumulated_depreciation: DF.Currency
-		opening_number_of_booked_depreciations: DF.Float
+		opening_number_of_booked_depreciations: DF.Int
 		policy_number: DF.Data | None
 		purchase_amount: DF.Currency
 		purchase_date: DF.Date

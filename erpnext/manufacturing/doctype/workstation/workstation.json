@@ -17,7 +17,6 @@
   "column_break_3",
   "production_capacity",
   "warehouse",
-  "production_line",
   "workstation_status_tab",
   "status",
   "column_break_glcv",
@@ -240,12 +239,6 @@
    "fieldname": "workstation_dashboard",
    "fieldtype": "HTML",
    "label": "Workstation Dashboard"
-  },
-  {
-   "fieldname": "production_line",
-   "fieldtype": "Link",
-   "label": "Production Line",
-   "options": "Production Line"
   }
  ],
  "icon": "icon-wrench",

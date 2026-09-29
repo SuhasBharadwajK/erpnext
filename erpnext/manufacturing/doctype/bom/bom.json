@@ -18,7 +18,6 @@
   "set_rate_of_sub_assembly_item_based_on_bom",
   "project",
   "image",
-  "slab_template",
   "currency_detail",
   "rm_cost_as_per",
   "buying_price_list",
@@ -635,13 +634,6 @@
   {
    "fieldname": "column_break_oxbz",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "slab_template",
-   "fieldtype": "Link",
-   "label": "Slab Template",
-   "options": "Slab Template",
-   "read_only": 1
   }
  ],
  "icon": "fa fa-sitemap",
