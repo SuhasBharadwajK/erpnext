@@ -13,7 +13,7 @@ frappe.query_reports["Accounts Payable"] = {
 		},
 		{
 			fieldname: "report_date",
-			label: __("Posting Date"),
+			label: __("Report Date"),
 			fieldtype: "Date",
 			default: frappe.datetime.get_today(),
 		},
@@ -33,6 +33,17 @@ frappe.query_reports["Accounts Payable"] = {
 				});
 			},
 			options: "Cost Center",
+		},
+		{
+			fieldname: "project",
+			label: __("Project"),
+			fieldtype: "MultiSelectList",
+			options: "Project",
+			get_data: function (txt) {
+				return frappe.db.get_link_options("Project", txt, {
+					company: frappe.query_report.get_filter_value("company"),
+				});
+			},
 		},
 		{
 			fieldname: "party_account",
@@ -58,10 +69,10 @@ frappe.query_reports["Accounts Payable"] = {
 			default: "Due Date",
 		},
 		{
-			fieldname: "calculate_ageing_with",
-			label: __("Calculate Ageing With"),
+			fieldname: "age_as_on",
+			label: __("Age as on"),
 			fieldtype: "Select",
-			options: "Report Date\nToday Date",
+			options: "Report Date\nToday",
 			default: "Report Date",
 		},
 		{
@@ -83,10 +94,15 @@ frappe.query_reports["Accounts Payable"] = {
 			options: get_party_type_options(),
 			on_change: function () {
 				frappe.query_report.set_filter_value("party", "");
-				frappe.query_report.toggle_filter_display(
-					"supplier_group",
-					frappe.query_report.get_filter_value("party_type") !== "Supplier"
-				);
+				let is_supplier = frappe.query_report.get_filter_value("party_type") === "Supplier";
+				let supplier_group_filter = frappe.query_report.get_filter("supplier_group");
+				if (supplier_group_filter) {
+					supplier_group_filter.df.hidden = !is_supplier;
+				}
+				frappe.query_report.toggle_filter_display("supplier_group", !is_supplier);
+				if (!is_supplier) {
+					frappe.query_report.set_filter_value("supplier_group", []);
+				}
 			},
 		},
 		{
@@ -106,8 +122,11 @@ frappe.query_reports["Accounts Payable"] = {
 		{
 			fieldname: "supplier_group",
 			label: __("Supplier Group"),
-			fieldtype: "Link",
+			fieldtype: "MultiSelectList",
 			options: "Supplier Group",
+			get_data: function (txt) {
+				return frappe.db.get_link_options("Supplier Group", txt);
+			},
 			hidden: 1,
 		},
 		{
@@ -132,7 +151,7 @@ frappe.query_reports["Accounts Payable"] = {
 		},
 		{
 			fieldname: "for_revaluation_journals",
-			label: __("Revaluation Journals"),
+			label: __("Include Revaluation Journals"),
 			fieldtype: "Check",
 		},
 		{
