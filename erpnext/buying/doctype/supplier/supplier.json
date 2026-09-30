@@ -165,6 +165,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Supplier Group",
+   "link_filters": "[[\"Supplier Group\",\"is_group\",\"=\",0]]",
    "oldfieldname": "supplier_type",
    "oldfieldtype": "Link",
    "options": "Supplier Group"
@@ -361,19 +362,22 @@
    "fieldname": "supplier_primary_contact",
    "fieldtype": "Link",
    "label": "Supplier Primary Contact",
+   "no_copy": 1,
    "options": "Contact"
   },
   {
    "fetch_from": "supplier_primary_contact.mobile_no",
    "fieldname": "mobile_no",
    "fieldtype": "Read Only",
-   "label": "Mobile No"
+   "label": "Mobile No",
+   "no_copy": 1
   },
   {
    "fetch_from": "supplier_primary_contact.email_id",
    "fieldname": "email_id",
    "fieldtype": "Read Only",
-   "label": "Email Id"
+   "label": "Email Id",
+   "no_copy": 1
   },
   {
    "fieldname": "column_break_44",
@@ -383,6 +387,7 @@
    "fieldname": "primary_address",
    "fieldtype": "Text",
    "label": "Primary Address",
+   "no_copy": 1,
    "read_only": 1
   },
   {
@@ -390,6 +395,7 @@
    "fieldname": "supplier_primary_address",
    "fieldtype": "Link",
    "label": "Supplier Primary Address",
+   "no_copy": 1,
    "options": "Address"
   },
   {
@@ -485,7 +491,7 @@
    "link_fieldname": "party"
   }
  ],
- "modified": "2026-02-12 19:21:33.402488",
+ "modified": "2026-09-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Buying",
  "name": "Supplier",
@@ -541,6 +547,30 @@
    "read": 1,
    "report": 1,
    "role": "Accounts Manager"
+  },
+  {
+   "role": "Delivery Manager",
+   "select": 1
+  },
+  {
+   "role": "Delivery User",
+   "select": 1
+  },
+  {
+   "role": "Maintenance User",
+   "select": 1
+  },
+  {
+   "role": "Quality Manager",
+   "select": 1
+  },
+  {
+   "role": "Sales Master Manager",
+   "select": 1
+  },
+  {
+   "role": "Website Manager",
+   "select": 1
   }
  ],
  "quick_entry": 1,
