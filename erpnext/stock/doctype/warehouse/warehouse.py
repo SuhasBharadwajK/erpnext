@@ -8,7 +8,7 @@ from frappe.utils import cint
 from frappe.utils.nestedset import NestedSet
 from pypika.terms import ExistsCriterion
 
-from erpnext.stock import get_warehouse_account, get_warehouse_account_map
+from erpnext.stock import get_warehouse_account
 
 
 class Warehouse(NestedSet):
@@ -55,45 +55,14 @@ class Warehouse(NestedSet):
 	def onload(self):
 		"""load account name for General Ledger Report"""
 		if self.company and cint(frappe.db.get_value("Company", self.company, "enable_perpetual_inventory")):
-			account = self.account or get_warehouse_account(self, raise_error=False)
+			account = self.account or get_warehouse_account(self)
 
 			if account:
 				self.set_onload("account", account)
 		load_address_and_contact(self)
 
 	def validate(self):
-		self.validate_warehouse_account()
-		self.validate_inventory_account()
 		self.warn_about_multiple_warehouse_account()
-
-	def validate_warehouse_account(self):
-		if self.account and self.company:
-			account_company = frappe.get_cached_value("Account", self.account, "company")
-			if account_company and account_company != self.company:
-				frappe.throw(
-					_("Account {0} does not belong to Company {1}").format(
-						frappe.bold(self.account), frappe.bold(self.company)
-					)
-				)
-
-	def validate_inventory_account(self):
-		if (
-			not self.is_new()
-			or not self.company
-			or self.flags.ignore_inventory_account_validation
-			or not frappe.get_cached_value("Company", self.company, "enable_perpetual_inventory")
-		):
-			return
-
-		warehouse = frappe._dict(self.as_dict())
-		if not self.account and self.parent_warehouse:
-			parent_bounds = frappe.db.get_value(
-				"Warehouse", self.parent_warehouse, ["lft", "rgt"], as_dict=True
-			)
-			if parent_bounds:
-				warehouse.update(parent_bounds)
-
-		get_warehouse_account(warehouse)
 
 	def on_update(self):
 		self.update_nsm_model()
@@ -132,23 +101,49 @@ class Warehouse(NestedSet):
 	def warn_about_multiple_warehouse_account(self):
 		"If Warehouse value is split across multiple accounts, warn."
 
-		if not frappe.db.count("Stock Ledger Entry", {"warehouse": self.name}):
+		def get_accounts_where_value_is_booked(name):
+			sle = frappe.qb.DocType("Stock Ledger Entry")
+			gle = frappe.qb.DocType("GL Entry")
+			ac = frappe.qb.DocType("Account")
+
+			return (
+				frappe.qb.from_(sle)
+				.join(gle)
+				.on(sle.voucher_no == gle.voucher_no)
+				.join(ac)
+				.on(ac.name == gle.account)
+				.select(gle.account)
+				.distinct()
+				.where((sle.warehouse == name) & (ac.account_type == "Stock"))
+				.orderby(sle.creation)
+				.run(as_dict=True)
+			)
+
+		if self.is_new():
 			return
 
-		doc_before_save = self.get_doc_before_save()
-		old_wh_account = doc_before_save.account if doc_before_save else None
+		old_wh_account = frappe.db.get_value("Warehouse", self.name, "account")
 
-		if self.is_new() or (self.account and old_wh_account == self.account):
-			return
+		# WH account is being changed or set get all accounts against which wh value is booked
+		if self.account != old_wh_account:
+			accounts = get_accounts_where_value_is_booked(self.name)
+			accounts = [d.account for d in accounts]
 
-		frappe.msgprint(
-			title=_("Warning: Account changed for warehouse"),
-			indicator="orange",
-			msg=_(
-				"Stock entries exist with the old account. Changing the account may lead to a mismatch between the warehouse closing balance and the account closing balance. The overall closing balance will still match, but not for the specific account."
-			),
-			alert=True,
-		)
+			if not accounts or (len(accounts) == 1 and self.account in accounts):
+				# if same singular account has stock value booked ignore
+				return
+
+			warning = _("Warehouse's Stock Value has already been booked in the following accounts:")
+			account_str = "<br>" + ", ".join(frappe.bold(ac) for ac in accounts)
+			reason = "<br><br>" + _(
+				"Booking stock value across multiple accounts will make it harder to track stock and account value."
+			)
+
+			frappe.msgprint(
+				warning + account_str + reason,
+				title=_("Multiple Warehouse Accounts"),
+				indicator="orange",
+			)
 
 	def check_if_sle_exists(self):
 		return frappe.db.exists("Stock Ledger Entry", {"warehouse": self.name})
@@ -214,13 +209,7 @@ def add_node():
 def convert_to_group_or_ledger(docname=None):
 	if not docname:
 		docname = frappe.form_dict.docname
-
-	# converting a warehouse between group and ledger restructures the tree, so it needs write on
-	# the warehouse being converted
-	warehouse = frappe.get_doc("Warehouse", docname)
-	warehouse.check_permission("write")
-
-	return warehouse.convert_to_group_or_ledger()
+	return frappe.get_doc("Warehouse", docname).convert_to_group_or_ledger()
 
 
 def get_child_warehouses(warehouse):
@@ -232,19 +221,11 @@ def get_child_warehouses(warehouse):
 
 def get_warehouses_based_on_account(account, company=None):
 	warehouses = []
-	warehouse_account_map = None
 	for d in frappe.get_all(
 		"Warehouse", fields=["name", "is_group"], filters={"account": account, "disabled": 0}
 	):
 		if d.is_group:
-			# Keep only children whose effective account matches; a child can override the group's account
-			if warehouse_account_map is None:
-				warehouse_account_map = get_warehouse_account_map(company)
-			warehouses.extend(
-				w
-				for w in get_child_warehouses(d.name)
-				if (warehouse_account_map.get(w) or {}).get("account") == account
-			)
+			warehouses.extend(get_child_warehouses(d.name))
 		else:
 			warehouses.append(d.name)
 

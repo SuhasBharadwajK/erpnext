@@ -10,17 +10,13 @@ from frappe.contacts.address_and_contact import (
 	load_address_and_contact,
 )
 from frappe.model.naming import set_name_by_naming_series, set_name_from_naming_options
-from frappe.utils import get_link_to_form
 
 from erpnext.accounts.party import (
 	get_dashboard_info,
 	validate_party_accounts,
 	validate_party_currency_before_merging,
 )
-from erpnext.controllers.website_list_for_contact import (
-	add_role_for_portal_user,
-	link_portal_users_to_contacts,
-)
+from erpnext.controllers.website_list_for_contact import add_role_for_portal_user
 from erpnext.utilities.transaction_base import TransactionBase
 
 
@@ -107,7 +103,6 @@ class Supplier(TransactionBase):
 	def on_update(self):
 		self.create_primary_contact()
 		self.create_primary_address()
-		link_portal_users_to_contacts(self)
 
 	def add_role_for_user(self):
 		for portal_user in self.portal_users:
@@ -178,15 +173,10 @@ class Supplier(TransactionBase):
 		)
 
 		if internal_supplier:
-			internal_supplier_link = get_link_to_form("Supplier", internal_supplier)
 			frappe.throw(
-				_(
-					"Internal Supplier {0} already exists for {1}. Disable it to make this Supplier internal."
-				).format(
-					internal_supplier_link,
-					frappe.bold(self.represents_company),
-				),
-				title=_("Internal Supplier Already Exists"),
+				_("Internal Supplier for company {0} already exists").format(
+					frappe.bold(self.represents_company)
+				)
 			)
 
 	def create_primary_contact(self):
@@ -233,15 +223,6 @@ class Supplier(TransactionBase):
 def get_supplier_primary(doctype, txt, searchfield, start, page_len, filters):
 	supplier = filters.get("supplier")
 	type = filters.get("type")
-
-	# `type` is caller-supplied and was interpolated into qb.DocType(), so any doctype could be
-	# joined to Dynamic Link and read. The two pickers send only these values.
-	if type not in ("Contact", "Address"):
-		frappe.throw(_("Invalid type"), frappe.PermissionError)
-
-	# authorise the party, not Contact/Address: the `if_owner` row on Address would empty the picker rather than error
-	frappe.has_permission("Supplier", doc=supplier, throw=True)
-
 	type_doctype = frappe.qb.DocType(type)
 	dynamic_link = frappe.qb.DocType("Dynamic Link")
 

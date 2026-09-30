@@ -1,6 +1,5 @@
 {
  "actions": [],
- "allow_bulk_edit": 1,
  "autoname": "naming_series:",
  "creation": "2018-07-09 17:23:29.518745",
  "doctype": "DocType",
@@ -136,7 +135,6 @@
    "fieldname": "wip_warehouse",
    "fieldtype": "Link",
    "label": "WIP Warehouse",
-   "link_filters": "[[\"Warehouse\",\"disabled\",\"=\",0],[\"Warehouse\",\"is_group\",\"=\",0]]",
    "options": "Warehouse",
    "reqd": 1
   },
@@ -234,7 +232,7 @@
    "fieldtype": "Select",
    "label": "Status",
    "no_copy": 1,
-   "options": "Open\nWork In Progress\nPartially Transferred\nMaterial Transferred\nOn Hold\nSubmitted\nCancelled\nCompleted",
+   "options": "Open\nWork In Progress\nMaterial Transferred\nOn Hold\nSubmitted\nCancelled\nCompleted",
    "read_only": 1
   },
   {
@@ -513,7 +511,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-06-22 11:51:16.526778",
+ "modified": "2025-08-04 15:47:54.514290",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Job Card",
