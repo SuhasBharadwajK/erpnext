@@ -2,39 +2,11 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Production Plan", {
-	is_monthly_production_plan(frm) {
-		if (frm.doc.is_monthly_production_plan) {
-			frm.set_value("naming_series", "MFG-MPP-.YYYY.-");
-			frm.set_value("is_parent_plan", 1);
-		} else {
-			frm.set_value("naming_series", "MFG-DPP-.YYYY.-");
-			frm.set_value("is_parent_plan", 0);
-		}
-	},
-
-	onload(frm) {
-		// Set correct naming series when form loads (new documents)
-		if (frm.is_new()) {
-			if (frm.doc.is_monthly_production_plan) {
-				frm.set_value("naming_series", "MFG-MPP-.YYYY.-");
-				frm.set_value("is_parent_plan", 1);
-
-			} else {
-				frm.set_value("naming_series", "MFG-DPP-.YYYY.-");
-				frm.set_value("is_parent_plan", 0);
-			}
-		}
-	},
-
 	before_save(frm) {
 		// preserve temporary names on production plan item to re-link sub-assembly items
-		["po_items_line_1", "po_items_line_2", "po_items_line_3", "po_items_mono_line", "po_items_multi_line"].forEach(function (table_name) {
-			if (Array.isArray(frm.doc[table_name])) {
-				frm.doc[table_name].forEach(function (item) {
-					item.temporary_name = item.name;
-				});
-			}
-		});;
+		frm.doc.po_items.forEach((item) => {
+			item.temporary_name = item.name;
+		});
 	},
 
 	setup(frm) {
@@ -52,6 +24,7 @@ frappe.ui.form.on("Production Plan", {
 				query: "erpnext.manufacturing.doctype.production_plan.production_plan.sales_order_query",
 				filters: {
 					company: frm.doc.company,
+					item_code: frm.doc.item_code,
 				},
 			};
 		});
@@ -61,6 +34,14 @@ frappe.ui.form.on("Production Plan", {
 				filters: {
 					company: doc.company,
 					is_group: 0,
+				},
+			};
+		});
+
+		frm.set_query("sub_assembly_warehouse", function (doc) {
+			return {
+				filters: {
+					company: doc.company,
 				},
 			};
 		});
@@ -75,44 +56,40 @@ frappe.ui.form.on("Production Plan", {
 			};
 		});
 
-		["po_items_line_1", "po_items_line_2", "po_items_line_3", "po_items_mono_line", "po_items_multi_line"]
-			.forEach(function (table_name) {
-				frm.set_query("item_code", table_name, (doc, cdt, cdn) => {
-					return {
-						query: "erpnext.controllers.queries.item_query",
-						filters: {
-							is_stock_item: 1,
-							item_group: "Finished Goods",
-						},
-					};
-				});
+		frm.set_query("item_code", "po_items", (doc, cdt, cdn) => {
+			return {
+				query: "erpnext.controllers.queries.item_query",
+				filters: {
+					is_stock_item: 1,
+				},
+			};
+		});
 
-				frm.set_query("bom_no", table_name, (doc, cdt, cdn) => {
-					var d = locals[cdt][cdn];
-					if (d.item_code) {
-						return {
-							query: "erpnext.controllers.queries.bom",
-							filters: { item: d.item_code, docstatus: 1 },
-						};
-					} else frappe.msgprint(__("Please enter Item first"));
-				});
+		frm.set_query("bom_no", "po_items", (doc, cdt, cdn) => {
+			var d = locals[cdt][cdn];
+			if (d.item_code) {
+				return {
+					query: "erpnext.controllers.queries.bom",
+					filters: { item: d.item_code, docstatus: 1 },
+				};
+			} else frappe.msgprint(__("Please enter Item first"));
+		});
 
-				frm.set_query("warehouse", "mr_items", (doc) => {
-					return {
-						filters: {
-							company: doc.company,
-						},
-					};
-				});
+		frm.set_query("warehouse", "mr_items", (doc) => {
+			return {
+				filters: {
+					company: doc.company,
+				},
+			};
+		});
 
-				frm.set_query("warehouse", table_name, (doc) => {
-					return {
-						filters: {
-							company: doc.company,
-						},
-					};
-				});
-			});
+		frm.set_query("warehouse", "po_items", (doc) => {
+			return {
+				filters: {
+					company: doc.company,
+				},
+			};
+		});
 	},
 
 	refresh(frm) {
@@ -129,14 +106,9 @@ frappe.ui.form.on("Production Plan", {
 				__("View")
 			);
 
-			if (frm.doc.status !== "Completed") {
-				frm.add_custom_button(
-					__("Delete Open Job Cards"),
-					() => {
-						frm.trigger("delete_job_cards");
-					}
-				);
+			let has_create_buttons = false;
 
+			if (frm.doc.status !== "Completed") {
 				if (frm.doc.status === "Closed") {
 					frm.add_custom_button(
 						__("Re-open"),
@@ -158,28 +130,14 @@ frappe.ui.form.on("Production Plan", {
 				let items = frm.events.get_items_for_work_order(frm);
 
 				if (items?.length && frm.doc.status !== "Closed") {
-					if (frm.doc.is_parent_plan == 1) {
-						frm.add_custom_button(
-							__("Daily Production Plan"),
-							() => {
-								frm.trigger("create_daily_production_plan");
-							},
-							__("Create")
-						);
-					}
-					else {
-						if (!frm.doc.is_work_order_created) {
-							frm.add_custom_button(
-								__("Work Order / Subcontract PO"),
-								async () => {
-									// await frm.set_value("is_work_order_created", 1);
-									// await frm.save("Update");
-									frm.trigger("make_work_order");
-								},
-								__("Create")
-							);
-						}
-					}
+					frm.add_custom_button(
+						__("Work Order / Subcontract PO"),
+						() => {
+							frm.trigger("make_work_order");
+						},
+						__("Create")
+					);
+					has_create_buttons = true;
 				}
 
 				if (
@@ -194,43 +152,15 @@ frappe.ui.form.on("Production Plan", {
 						},
 						__("Create")
 					);
+					has_create_buttons = true;
 				}
 			}
 
-			if (frm.doc.is_parent_plan && frm.doc.docstatus == 1) {
-				frm.add_custom_button(__("Refresh from DPPs"), function () {
-					frappe.call({
-						method: "erpnext.manufacturing.doctype.production_plan.production_plan.refresh_mpp_progress",
-						args: {
-							mpp_name: frm.doc.name
-						},
-						callback: function (r) {
-							if (!r.exc) {
-								frappe.msgprint("MPP updated from its DPP's");
-								frm.refresh();
-							}
-						}
-					});
-				});
+			if (has_create_buttons && frm.doc.status !== "Closed") {
+				frm.page.set_inner_btn_group_as_primary(__("Create"));
 			}
 		}
-
-		if (frm.doc.deleted_job_card_count) {
-			frm.page.wrapper.find(".comment-box").css({ 'display': 'none' });
-		}
-
-		if (frm.doc.status !== "Closed") {
-			frm.page.set_inner_btn_group_as_primary(__("Create"));
-		}
 		frm.trigger("material_requirement");
-
-		// if (frm.doc.is_parent_plan && frm.doc.docstatus == 1)
-		// {
-		// 	frm.add_custom_query_report("DPP", {
-		// 		method: "erpnext.manufacturing.doctype.production_plan.production_plan.get_dpp_list",
-		// 		args: { mpp_name: frm.doc.name }
-		// 	});
-		// }
 
 		const projected_qty_formula = ` <table class="table table-bordered" style="background-color: var(--scrollbar-track-color);">
 			<tr><td style="padding-left:25px">
@@ -278,41 +208,16 @@ frappe.ui.form.on("Production Plan", {
 		set_field_options("projected_qty_formula", projected_qty_formula);
 	},
 
-	onload: function (frm) {
-		if (frm.doc.is_parent_plan && frm.doc.docstatus == 1) {
-			// Auto-update on load
-			frappe.call({
-				method: "erpnext.manufacturing.doctype.production_plan.production_plan.refresh_mpp_progress",
-				args: { mpp_name: frm.doc.name },
-				callback: function (r) {
-					frm.refresh()
-				}
-			});
-		}
-	},
-
 	get_items_for_work_order(frm) {
-		// let items = frm.doc.po_items;
-		let items = [];
-		if (Array.isArray(frm.doc.po_items_line_1))
-			items = items.concat(frm.doc.po_items_line_1);
-		if (Array.isArray(frm.doc.po_items_line_2))
-			items = items.concat(frm.doc.po_items_line_2);
-		if (Array.isArray(frm.doc.po_items_line_3))
-			items = items.concat(frm.doc.po_items_line_3);
-		if (Array.isArray(frm.doc.po_items_mono_line))
-			items = items.concat(frm.doc.po_items_mono_line);
-		if (Array.isArray(frm.doc.po_items_multi_line))
-			items = items.concat(frm.doc.po_items_multi_line);
-
+		let items = frm.doc.po_items;
 		if (frm.doc.sub_assembly_items?.length) {
 			items = [...items, ...frm.doc.sub_assembly_items];
 		}
 
 		let has_items =
 			items.filter((item) => {
-				if (item.pending_qty) {
-					return item.pending_qty > item.ordered_qty;
+				if (item.planned_qty) {
+					return item.planned_qty > item.ordered_qty;
 				} else {
 					return item.qty > (item.received_qty || item.ordered_qty);
 				}
@@ -342,62 +247,6 @@ frappe.ui.form.on("Production Plan", {
 				frm.reload_doc();
 			},
 		});
-		// work_order_message = __("Creating Job Cards in the background")
-		// frappe.call({
-		// 	method: "make_work_order",
-		// 	freeze: true,
-		// 	doc: frm.doc,
-		// 	callback: function () {
-		// 		frappe.show_progress(
-		// 			work_order_message,
-		// 			0,
-		// 			100,
-		// 			__("Please wait...")
-		// 		);
-
-		// 		let current_progress = 0;
-		// 		let total_progress = 1;
-
-		// 		frappe.realtime.on("production_plan_job_card_progress", (data) => {
-		// 			if (data.production_plan === frm.doc.name) {
-		// 				if (data.total) {
-		// 					total_progress = data.total;
-		// 					current_progress = 0;
-		// 				}
-
-		// 				if (data.increment) {
-		// 					current_progress += data.increment;
-		// 				}
-
-		// 				let percent = (current_progress / total_progress) * 100;
-		// 				if (percent > 100) percent = 100;
-
-		// 				frappe.show_progress(
-		// 					work_order_message,
-		// 					percent,
-		// 					100,
-		// 					__("{0} Job Cards created (you can close this dialog)", [current_progress, total_progress])
-		// 				);
-
-		// 				if (data.reload) {
-		// 					// frm.set_value("is_work_order_created", 1);
-		// 					// frm.save("Update");
-		// 					// frm.refresh();
-		// 					frappe.show_progress(
-		// 						work_order_message,
-		// 						100,
-		// 						100,
-		// 						__("Completed creating all job cards.")
-		// 					);
-		// 					setTimeout(() => {
-		// 						frappe.hide_progress();
-		// 						frm.reload_doc();
-		// 					}, 2000);
-		// 				}
-		// 			}
-		// 		});
-		// 	},
-		// });
 	},
 
 	make_material_request(frm) {
@@ -445,91 +294,18 @@ frappe.ui.form.on("Production Plan", {
 		});
 	},
 
-	get_items_line_1(frm) {
-		frm.set_value("combine_items_line_1", 1);
-		frm.set_value("combine_items_line_2", 0);
-		frm.set_value("combine_items_line_3", 0);
-		frm.set_value("combine_items_mono_line", 0);
-		frm.set_value("combine_items_multi_line", 0);
+	get_items(frm) {
+		frm.clear_table("prod_plan_references");
 
-		frm.call({
+		frappe.call({
 			method: "get_items",
 			freeze: true,
 			doc: frm.doc,
 			callback: function () {
-				frm.refresh_field("po_items_line_1");
+				refresh_field("po_items");
 			},
 		});
 	},
-
-	get_items_line_2(frm) {
-		frm.set_value("combine_items_line_1", 0);
-		frm.set_value("combine_items_line_2", 1);
-		frm.set_value("combine_items_line_3", 0);
-		frm.set_value("combine_items_mono_line", 0);
-		frm.set_value("combine_items_multi_line", 0);
-
-		frm.call({
-			method: "get_items",
-			freeze: true,
-			doc: frm.doc,
-			callback: function () {
-				frm.refresh_field("po_items_line_2");
-			},
-		});
-	},
-
-	get_items_line_3(frm) {
-		frm.set_value("combine_items_line_1", 0);
-		frm.set_value("combine_items_line_2", 0);
-		frm.set_value("combine_items_line_3", 1);
-		frm.set_value("combine_items_mono_line", 0);
-		frm.set_value("combine_items_multi_line", 0);
-
-		frm.call({
-			method: "get_items",
-			freeze: true,
-			doc: frm.doc,
-			callback: function () {
-				frm.refresh_field("po_items_line_3");
-			},
-		});
-	},
-
-	get_items_mono_line(frm) {
-		frm.set_value("combine_items_line_1", 0);
-		frm.set_value("combine_items_line_2", 0);
-		frm.set_value("combine_items_line_3", 0);
-		frm.set_value("combine_items_mono_line", 1);
-		frm.set_value("combine_items_multi_line", 0);
-
-		frm.call({
-			method: "get_items",
-			freeze: true,
-			doc: frm.doc,
-			callback: function () {
-				frm.refresh_field("po_items_mono_line");
-			},
-		});
-	},
-
-	get_items_multi_line(frm) {
-		frm.set_value("combine_items_line_1", 0);
-		frm.set_value("combine_items_line_2", 0);
-		frm.set_value("combine_items_line_3", 0);
-		frm.set_value("combine_items_mono_line", 0);
-		frm.set_value("combine_items_multi_line", 1);
-
-		frm.call({
-			method: "get_items",
-			freeze: true,
-			doc: frm.doc,
-			callback: function () {
-				frm.refresh_field("po_items_multi_line");
-			},
-		});
-	},
-
 	combine_items(frm) {
 		frm.clear_table("prod_plan_references");
 
@@ -538,12 +314,7 @@ frappe.ui.form.on("Production Plan", {
 			freeze: true,
 			doc: frm.doc,
 			callback: function () {
-				// frm.refresh_field("po_items");
-				frm.refresh_field("po_items_line_1");
-				frm.refresh_field("po_items_line_2");
-				frm.refresh_field("po_items_line_3");
-				frm.refresh_field("po_items_mono_line");
-				frm.refresh_field("po_items_multi_line");
+				frm.refresh_field("po_items");
 				if (frm.doc.sub_assembly_items.length > 0) {
 					frm.trigger("get_sub_assembly_items");
 				}
@@ -709,15 +480,11 @@ frappe.ui.form.on("Production Plan", {
 
 		// produced qty
 		let item_wise_qty = {};
-		["po_items_line_1", "po_items_line_2", "po_items_line_3", "po_items_mono_line", "po_items_multi_line"].forEach(function (table_name) {
-			if (Array.isArray(frm.doc[table_name])) {
-				frm.doc[table_name].forEach(function (data) {
-					if (!item_wise_qty[data.item_code]) {
-						item_wise_qty[data.item_code] = flt(data.produced_qty || 0);
-					} else {
-						item_wise_qty[data.item_code] += flt(data.produced_qty || 0);
-					}
-				});
+		frm.doc.po_items.forEach((data) => {
+			if (!item_wise_qty[data.item_code]) {
+				item_wise_qty[data.item_code] = data.produced_qty;
+			} else {
+				item_wise_qty[data.item_code] += data.produced_qty;
 			}
 		});
 
@@ -737,183 +504,6 @@ frappe.ui.form.on("Production Plan", {
 		}
 		message = title;
 		frm.dashboard.add_progress(__("Status"), bars, message);
-	},
-
-	delete_job_cards(frm) {
-		frappe.db.get_list("Production Line", {
-			filters: { is_group: 0, is_active: 1, parent_line: 'L2' },
-			fields: ["name", "line_name"]
-		}).then(data => {
-			let fields = [
-				{
-					fieldname: "reason_for_deletion_of_job_cards",
-					label: __("Reason for Deletion"),
-					fieldtype: "Data",
-					reqd: 1,
-				},
-				{
-					fieldname: "delete_all_job_cards",
-					label: __("Delete All Open Job Cards"),
-					fieldtype: "Check",
-					default: 1,
-				},
-				{
-					fieldname: "production_line",
-					label: __("Production Line"),
-					fieldtype: "Select",
-					options: data.map(d => ({ label: d.line_name, value: d.name })),
-					hidden: 1,
-				},
-				{
-					fieldname: "item_name",
-					label: __("Item Name"),
-					fieldtype: "Select",
-					options: [],
-					hidden: 1,
-				}
-			];
-			let d = frappe.prompt(
-				fields,
-				(values) => {
-					let delete_message = __("Deleting Job Cards");
-					frappe.show_progress(delete_message, 0, 100, __("Please wait..."));
-
-					let current_progress = 0;
-					let total_progress = 1;
-
-					// The deletion publishes progress while the request is in flight,
-					// so subscribe before firing the call (not in its callback).
-					frappe.realtime.on("production_plan_delete_job_card_progress", (data) => {
-						if (data.production_plan !== frm.doc.name) return;
-
-						if (data.total) {
-							total_progress = data.total;
-							current_progress = 0;
-						}
-
-						if (data.increment) {
-							current_progress += data.increment;
-						}
-
-						let percent = (current_progress / total_progress) * 100;
-						if (percent > 100) percent = 100;
-
-						frappe.show_progress(
-							delete_message,
-							percent,
-							100,
-							__("{0} of {1} Job Cards deleted", [current_progress, total_progress])
-						);
-
-						if (data.reload) {
-							frappe.show_progress(delete_message, 100, 100, __("Completed deleting all job cards."));
-							frappe.realtime.off("production_plan_delete_job_card_progress");
-							setTimeout(() => frappe.hide_progress(), 2000);
-						}
-					});
-
-					frappe.call({
-						method: "erpnext.manufacturing.doctype.production_plan.api.delete_job_cards",
-						args: {
-							production_plan: frm.doc.name,
-							reason: values.reason_for_deletion_of_job_cards,
-							delete_all_job_cards: values.delete_all_job_cards,
-							production_line: values.production_line,
-							item_code: values.item_name,
-						},
-						callback: function (r) {
-							// Stop listening even if the server threw before publishing
-							// the final "reload" event (e.g. no open job cards found).
-							frappe.realtime.off("production_plan_delete_job_card_progress");
-
-							if (!r.exc) {
-								let count = r.message.deleted_count;
-								let reason = r.message.reason;
-
-								frappe.msgprint(
-									`${count} remaining job card${count > 1 ? 's' : ''} were deleted from this production plan ${values.delete_all_job_cards ? 'all' : 'selected'} with the reason: "${reason}"`
-								);
-								frm.set_value("reason_for_deletion_of_job_cards", reason);
-								frm.set_value("deleted_job_card_count", count);
-
-								frm.reload_doc();
-							} else {
-								frappe.hide_progress();
-							}
-						}
-					});
-				},
-				__("Delete Open Job Cards"),
-				__("Delete")
-			);
-
-			let toggle_fields = () => {
-				let delete_all = d.get_value("delete_all_job_cards");
-
-				if (delete_all) {
-					d.set_value("production_line", "");
-					d.set_value("item_name", "");
-				}
-
-				d.set_df_property("production_line", "hidden", delete_all ? 1 : 0);
-				d.set_df_property("item_name", "hidden", delete_all ? 1 : 0);
-			};
-
-			d.fields_dict.delete_all_job_cards.df.onchange = toggle_fields;
-			toggle_fields();
-
-			// ✅ Update Item Name options when Production Line changes
-			d.fields_dict.production_line.df.onchange = () => {
-				let production_line = d.get_value("production_line");
-				if (!production_line) {
-					d.set_df_property("item_name", "options", []);
-					return;
-				}
-
-				frappe.db.get_list("Work Order", {
-					filters: {
-						production_plan: frm.doc.name,
-						production_line: production_line,
-						fg_warehouse: ["like", "%Finished Goods%"]
-					},
-					fields: ["production_item", "item_name"],
-					distinct: 1
-				}).then(items => {
-					let options = items.map(i => ({ label: i.item_name || i.production_item, value: i.production_item }));
-					d.set_df_property("item_name", "options", options);
-					if (options.length > 0) {
-						d.set_value("item_name", options[0].value);
-					}
-				});
-			};
-		});
-	},
-
-	create_daily_production_plan(frm) {
-		frappe.prompt(
-			{
-				fieldname: "dpp_date",
-				label: __("Daily Production Plan Date"),
-				fieldtype: "Date",
-				reqd: 1,
-			},
-			(values) => {
-				frappe.call({
-					method: "erpnext.manufacturing.doctype.production_plan.production_plan.create_daily_production_plan",
-					args: {
-						parent_name: frm.doc.name,
-						dpp_date: values.dpp_date,
-					},
-					callback: (r) => {
-						if (!r.exc && r.message) {
-							frappe.set_route("Form", "Production Plan", r.message);
-						}
-					},
-				});
-			},
-			__("Create Daily Production Plan"),
-			__("Create")
-		);
 	},
 });
 
@@ -1044,73 +634,17 @@ frappe.tour["Production Plan"] = [
 		description: __("Click on Get Sales Orders to fetch sales orders based on the above filters."),
 	},
 	{
-		fieldname: "get_items_line_1",
-		title: "Get Finished Goods for Manufacture in Line1",
+		fieldname: "get_items",
+		title: "Get Finished Goods for Manufacture",
 		description: __(
-			"Click on 'Get Finished Goods for Manufacture in Line1' to fetch the items from the above Sales Orders. Items only for which a BOM is present will be fetched."
+			"Click on 'Get Finished Goods for Manufacture' to fetch the items from the above Sales Orders. Items only for which a BOM is present will be fetched."
 		),
 	},
 	{
-		fieldname: "get_items_line_2",
-		title: "Get Finished Goods for Manufacture in Line2",
+		fieldname: "po_items",
+		title: "Finished Goods",
 		description: __(
-			"Click on 'Get Finished Goods for Manufacture in Line2' to fetch the items from the above Sales Orders. Items only for which a BOM is present will be fetched."
-		),
-	},
-	{
-		fieldname: "get_items_line_3",
-		title: "Get Finished Goods for Manufacture in Line3",
-		description: __(
-			"Click on 'Get Finished Goods for Manufacture in Line3' to fetch the items from the above Sales Orders. Items only for which a BOM is present will be fetched."
-		),
-	},
-	{
-		fieldname: "get_items_mono_line",
-		title: "Get Finished Goods for Manufacture in Mono Line",
-		description: __(
-			"Click on 'Get Finished Goods for Manufacture in Mono Line' to fetch the items from the above Sales Orders. Items only for which a BOM is present will be fetched."
-		),
-	},
-	{
-		fieldname: "get_items_multi_line",
-		title: "Get Finished Goods for Manufacture in Multi Line",
-		description: __(
-			"Click on 'Get Finished Goods for Manufacture in Multi Line' to fetch the items from the above Sales Orders. Items only for which a BOM is present will be fetched."
-		),
-	},
-	{
-		fieldname: "po_items_line_1",
-		title: "Finished Goods Line 1",
-		description: __(
-			"On expanding a row in the Items to Manufacture Line 1 table, you'll see an option to 'Include Exploded Items'. Ticking this includes raw materials of the sub-assembly items in the production process."
-		),
-	},
-	{
-		fieldname: "po_items_line_2",
-		title: "Finished Goods Line 2",
-		description: __(
-			"On expanding a row in the Items to Manufacture Line 2 table, you'll see an option to 'Include Exploded Items'. Ticking this includes raw materials of the sub-assembly items in the production process."
-		),
-	},
-	{
-		fieldname: "po_items_line_3",
-		title: "Finished Goods Line 3",
-		description: __(
-			"On expanding a row in the Items to Manufacture Line 3 table, you'll see an option to 'Include Exploded Items'. Ticking this includes raw materials of the sub-assembly items in the production process."
-		),
-	},
-	{
-		fieldname: "po_items_mono_line",
-		title: "Finished Goods Mono Line",
-		description: __(
-			"On expanding a row in the Items to Manufacture Mono Line table, you'll see an option to 'Include Exploded Items'. Ticking this includes raw materials of the sub-assembly items in the production process."
-		),
-	},
-	{
-		fieldname: "po_items_multi_line",
-		title: "Finished Goods Multi Line",
-		description: __(
-			"On expanding a row in the Items to Manufacture Multi Line table, you'll see an option to 'Include Exploded Items'. Ticking this includes raw materials of the sub-assembly items in the production process."
+			"On expanding a row in the Items to Manufacture table, you'll see an option to 'Include Exploded Items'. Ticking this includes raw materials of the sub-assembly items in the production process."
 		),
 	},
 	{

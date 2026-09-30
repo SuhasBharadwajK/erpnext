@@ -18,7 +18,6 @@
   "set_rate_of_sub_assembly_item_based_on_bom",
   "project",
   "image",
-  "slab_template",
   "currency_detail",
   "rm_cost_as_per",
   "buying_price_list",
@@ -635,13 +634,6 @@
   {
    "fieldname": "column_break_oxbz",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "slab_template",
-   "fieldtype": "Link",
-   "label": "Slab Template",
-   "options": "Slab Template",
-   "read_only": 1
   }
  ],
  "icon": "fa fa-sitemap",
@@ -649,7 +641,7 @@
  "image_field": "image",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-03-05 12:54:49.000543",
+ "modified": "2025-11-19 16:17:15.925156",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "BOM",

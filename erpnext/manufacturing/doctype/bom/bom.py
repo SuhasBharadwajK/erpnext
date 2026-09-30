@@ -106,11 +106,12 @@ class BOM(WebsiteGenerator):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from frappe.types import DF
+
 		from erpnext.manufacturing.doctype.bom_explosion_item.bom_explosion_item import BOMExplosionItem
 		from erpnext.manufacturing.doctype.bom_item.bom_item import BOMItem
 		from erpnext.manufacturing.doctype.bom_operation.bom_operation import BOMOperation
 		from erpnext.manufacturing.doctype.bom_scrap_item.bom_scrap_item import BOMScrapItem
-		from frappe.types import DF
 
 		allow_alternative_item: DF.Check
 		amended_from: DF.Link | None
@@ -155,9 +156,9 @@ class BOM(WebsiteGenerator):
 		show_in_website: DF.Check
 		show_items: DF.Check
 		show_operations: DF.Check
-		slab_template: DF.Link | None
 		thumbnail: DF.Data | None
 		total_cost: DF.Currency
+		track_semi_finished_goods: DF.Check
 		transfer_material_against: DF.Literal["", "Work Order", "Job Card"]
 		uom: DF.Link | None
 		web_long_description: DF.TextEditor | None
@@ -301,41 +302,6 @@ class BOM(WebsiteGenerator):
 	def on_update(self):
 		frappe.cache().hdel("bom_children", self.name)
 		self.check_recursion()
-
-	def before_save(self):
-		if not self.item or self.company != "Unit-2":
-			return
-		base_item_code = self.item.split(" - ")[0].strip()
-		slab_template = frappe.db.exists("Slab Template", base_item_code)
-		if not slab_template:
-			parts = base_item_code.split("-")
-
-			slab_colour = f"{parts[0]}-{parts[1]}"
-			thickness = parts[2].lower()
-			slab_size = parts[3]
-
-			slab_color = frappe.db.exists("Slab Colour", slab_colour)
-			if not slab_color:
-				slab_color_doc = frappe.new_doc("Slab Colour")
-				slab_color_doc.code = slab_colour
-				slab_color_doc.insert(ignore_permissions=True)
-				slab_color = slab_color_doc.name
-
-			slab_size = frappe.db.exists("Slab Size", slab_size)
-			if not slab_size:
-				frappe.throw("Slab Size does not exist")
-
-			if thickness not in ["2cm", "3cm"]:
-				frappe.throw("Slab Thickness should be either 2cm or 3cm")
-
-			slab_doc = frappe.new_doc("Slab Template")
-			slab_doc.colour_code = slab_color
-			slab_doc.thickness = thickness
-			slab_doc.size = slab_size
-			slab_doc.insert(ignore_permissions=True)
-			slab_template = slab_doc.name
-
-		self.slab_template = slab_template
 
 	def on_submit(self):
 		self.manage_default_bom()

@@ -23,8 +23,6 @@
   "disassembled_qty",
   "process_loss_qty",
   "project",
-  "production_line",
-  "slab_group_id",
   "section_break_ndpq",
   "required_items",
   "work_order_configuration",
@@ -46,6 +44,7 @@
   "has_batch_no",
   "column_break_18",
   "batch_size",
+  "required_items_section",
   "materials_and_operations_tab",
   "operations_section",
   "transfer_material_against",
@@ -271,6 +270,11 @@
    "fieldtype": "Link",
    "label": "Scrap Warehouse",
    "options": "Warehouse"
+  },
+  {
+   "fieldname": "required_items_section",
+   "fieldtype": "Section Break",
+   "label": "Required Items"
   },
   {
    "fieldname": "required_items",
@@ -591,24 +595,6 @@
    "label": "Disassembled Qty",
    "no_copy": 1,
    "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.production_line",
-   "fieldname": "production_line",
-   "fieldtype": "Link",
-   "label": "Production Line",
-   "options": "Production Line",
-   "read_only": 1
-  },
-  {
-   "description": "Groups every Work Order created for a single slab by the mixer station. Used to resolve the next process's Work Order without a Production Plan.",
-   "fieldname": "slab_group_id",
-   "fieldtype": "Data",
-   "label": "Slab Group ID",
-   "no_copy": 1,
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
   }
  ],
  "icon": "fa fa-cogs",
@@ -616,7 +602,7 @@
  "image_field": "image",
  "is_submittable": 1,
  "links": [],
- "modified": "2025-12-26 15:34:56.022163",
+ "modified": "2025-06-21 00:55:45.916224",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Work Order",
@@ -646,7 +632,6 @@
    "role": "Stock User"
   }
  ],
- "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "ASC",
  "states": [],

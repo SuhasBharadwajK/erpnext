@@ -1,11 +1,9 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from erpnext.manufacturing.doctype.job_card.constants import LOW_PRIORITY, TEST_ITEM_PRIORITY
 import json
 
 import frappe
-from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from frappe import _
 from frappe.model.document import Document
@@ -39,7 +37,6 @@ from erpnext.stock.doctype.serial_no.serial_no import get_available_serial_nos, 
 from erpnext.stock.stock_balance import get_planned_qty, update_bin_qty
 from erpnext.stock.utils import get_bin, get_latest_stock_qty, validate_warehouse_company
 from erpnext.utilities.transaction_base import validate_uom_is_integer
-from spl_mods.slab_manufacturing.doctype.manufacturing_process.constants import ALL_MFG_PROCESSES
 
 
 class OverProductionError(frappe.ValidationError):
@@ -73,9 +70,12 @@ class WorkOrder(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from erpnext.manufacturing.doctype.work_order_item.work_order_item import WorkOrderItem
-		from erpnext.manufacturing.doctype.work_order_operation.work_order_operation import WorkOrderOperation
 		from frappe.types import DF
+
+		from erpnext.manufacturing.doctype.work_order_item.work_order_item import WorkOrderItem
+		from erpnext.manufacturing.doctype.work_order_operation.work_order_operation import (
+			WorkOrderOperation,
+		)
 
 		actual_end_date: DF.Datetime | None
 		actual_operating_cost: DF.Currency
@@ -109,7 +109,6 @@ class WorkOrder(Document):
 		produced_qty: DF.Float
 		product_bundle_item: DF.Link | None
 		production_item: DF.Link
-		production_line: DF.Link | None
 		production_plan: DF.Link | None
 		production_plan_item: DF.Data | None
 		production_plan_sub_assembly_item: DF.Data | None
@@ -145,83 +144,6 @@ class WorkOrder(Document):
 		self.set_onload("material_consumption", ms.material_consumption)
 		self.set_onload("backflush_raw_materials_based_on", ms.backflush_raw_materials_based_on)
 		self.set_onload("overproduction_percentage", ms.overproduction_percentage_for_work_order)
-
-	def before_naming(self):
-		year = frappe.utils.today()[:4]
-		if self.production_line:
-			self.naming_series = f"MFG-WO-{self.production_line}-{year}-.#####"
-		else:
-			self.naming_series = f"MFG-WO-{year}-.#####"
-
-	def before_insert(self):
-		process_name = None
-		item_name_lower = (self.production_item or "").lower()
-
-		# Strategy A: Try to find a matching process in BOM operations
-		if self.bom_no:
-			bom_ops = frappe.get_all(
-				"BOM Operation", filters={"parent": self.bom_no}, fields=["operation"], order_by="idx desc"
-			)
-			for row in bom_ops:
-				if row.operation in ALL_MFG_PROCESSES:
-					process_name = row.operation
-					break
-
-		# Strategy B: Substring match against Item Code/Name
-		if not process_name:
-			# Sort processes by length descending to match longest name first
-			for process in sorted(ALL_MFG_PROCESSES, key=len, reverse=True):
-				if process.lower() in item_name_lower:
-					process_name = process
-					break
-
-		# Strategy C: Hardcoded fallback common keywords for Mahi stage items
-		if not process_name and item_name_lower:
-			if "pressed slab" in item_name_lower:
-				process_name = "Pressing"
-			elif "heated slab" in item_name_lower:
-				process_name = "Heating"
-			elif "cooled slab" in item_name_lower:
-				process_name = "Cooling"
-			elif "trimmed slab" in item_name_lower:
-				process_name = "Trimming"
-			elif "calibrated slab" in item_name_lower:
-				process_name = "Calibration"
-			elif "polished slab" in item_name_lower:
-				process_name = "Polishing"
-			elif "mixing" in item_name_lower:
-				process_name = "Mixing"
-			elif "distribution" in item_name_lower:
-				process_name = "Distribution"
-			else:
-				process_name = "Quality Check"
-
-		# Strategy D: Default to Quality Check if it looks like a final FG
-		if not process_name and "fg" in item_name_lower:
-			process_name = "Quality Check"
-
-		# 2. Lookup Process Warehouse Map
-		if process_name and self.production_line:
-			wh_map = frappe.db.get_value(
-				"Process Warehouse Map",
-				{"process_name": process_name, "production_line": self.production_line},
-				["source_warehouse", "wip_warehouse", "fg_warehouse"],
-				as_dict=1,
-			)
-			if wh_map:
-				self.source_warehouse = wh_map.source_warehouse
-				self.wip_warehouse = wh_map.wip_warehouse
-				self.fg_warehouse = wh_map.fg_warehouse
-
-				for row in self.required_items:
-					row.source_warehouse = self.source_warehouse
-
-	# def after_insert(self):
-	# 	"""Auto-submit Work Order after warehouses are set"""
-	# 	self.load_from_db()
-	# 	if self.docstatus == 0:
-	# 		self.submit()
-	# 		self.update_status()
 
 	def validate(self):
 		self.validate_production_item()
@@ -572,24 +494,10 @@ class WorkOrder(Document):
 		self.create_serial_no_batch_no()
 
 	def on_submit(self):
-		from spl_mods.slab_manufacturing.doctype.manufacturing_process.constants import ALL_MFG_PROCESSES
-
-		item_lower = (self.production_item or "").lower()
-
-		# Skip standard warehouse validation for Mahi manufacturing items
-		is_mahi_item = (
-			any(p.lower() in item_lower for p in ALL_MFG_PROCESSES)
-			or "slab" in item_lower
-			or "fg" in item_lower
-		)
-
-		if is_mahi_item:
-			pass
-		else:
-			if not self.wip_warehouse and not self.skip_transfer:
-				frappe.throw(_("Work-in-Progress Warehouse is required before Submit"))
-			if not self.fg_warehouse:
-				frappe.throw(_("For Warehouse is required before Submit"))
+		if not self.wip_warehouse and not self.skip_transfer:
+			frappe.throw(_("Work-in-Progress Warehouse is required before Submit"))
+		if not self.fg_warehouse:
+			frappe.throw(_("For Warehouse is required before Submit"))
 
 		if self.production_plan and frappe.db.exists(
 			"Production Plan Item Reference", {"parent": self.production_plan}
@@ -603,14 +511,6 @@ class WorkOrder(Document):
 		self.update_completed_qty_in_material_request()
 		self.update_planned_qty()
 		self.create_job_card()
-		# self.set_workstation_to_job_cards()
-
-	def set_workstation_to_job_cards(self):
-		job_cards = frappe.get_all("Job Card", filters={"work_order": self.name}, fields=["name"])
-		for job_card in job_cards:
-			job_card_doc = frappe.get_doc("Job Card", job_card.name)
-			job_card_doc.set_workstation()
-			job_card_doc.save()
 
 	def on_cancel(self):
 		self.validate_cancel()
@@ -761,9 +661,6 @@ class WorkOrder(Document):
 		frappe.db.bulk_insert("Serial No", fields=fields, values=set(serial_nos_details))
 
 	def create_job_card(self):
-		# if frappe.db.exists("Job Card", {"work_order": self.name, "docstatus": ["!=", 2]}):
-		# 	return
-
 		manufacturing_settings_doc = frappe.get_doc("Manufacturing Settings")
 
 		enable_capacity_planning = not cint(manufacturing_settings_doc.disable_capacity_planning)
@@ -784,11 +681,7 @@ class WorkOrder(Document):
 		self.set_operation_start_end_time(row, idx)
 
 		job_card_doc = create_job_card(
-			self,
-			row,
-			auto_create=True,
-			enable_capacity_planning=enable_capacity_planning,
-			production_line=self.production_line,
+			self, row, auto_create=True, enable_capacity_planning=enable_capacity_planning
 		)
 
 		if enable_capacity_planning and job_card_doc:
@@ -1787,18 +1680,11 @@ def validate_operation_data(row):
 		)
 
 
-def create_job_card(work_order, row, auto_create=False, enable_capacity_planning=False, production_line=None):
-	# Determine priority based on is_test_item from the Production Plan
-	is_test_item = False
-	if work_order.production_plan:
-		is_test_item = frappe.db.get_value("Production Plan", work_order.production_plan, "is_test_item")
-	priority = TEST_ITEM_PRIORITY if is_test_item else LOW_PRIORITY
-
+def create_job_card(work_order, row, enable_capacity_planning=False, auto_create=False):
 	doc = frappe.new_doc("Job Card")
 	doc.update(
 		{
 			"work_order": work_order.name,
-			"production_line": production_line,
 			"workstation_type": row.get("workstation_type"),
 			"operation": row.get("operation"),
 			"workstation": row.get("workstation"),
@@ -1814,7 +1700,6 @@ def create_job_card(work_order, row, auto_create=False, enable_capacity_planning
 			else work_order.source_warehouse or row.get("source_warehouse"),
 			"hour_rate": row.get("hour_rate"),
 			"serial_no": row.get("serial_no"),
-			"priority": priority,
 		}
 	)
 
@@ -1828,13 +1713,6 @@ def create_job_card(work_order, row, auto_create=False, enable_capacity_planning
 
 		doc.insert()
 		frappe.msgprint(_("Job card {0} created").format(get_link_to_form("Job Card", doc.name)), alert=True)
-
-		if work_order.production_plan:
-			frappe.publish_realtime(
-				"production_plan_job_card_progress",
-				{"increment": 1, "production_plan": work_order.production_plan, "job_card": doc.name},
-				user=work_order.owner,
-			)
 
 	if enable_capacity_planning:
 		# automatically added scheduling rows shouldn't change status to WIP
