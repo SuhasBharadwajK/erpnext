@@ -1300,4 +1300,3 @@ $.extend(erpnext.stock.utils, {
 		});
 	},
 });
-
